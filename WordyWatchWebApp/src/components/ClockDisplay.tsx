@@ -27,6 +27,11 @@ interface CategorizedLetterGridProps {
 }
 
 function createLetterGrid(layout: ClockLayout, layoutMetadata?: LayoutMetadata | null): string[][] {
+  // If layout has full grid data, use it directly
+  if (layout.gridData && layout.gridData.length > 0) {
+    return layout.gridData;
+  }
+  
   // Use pre-generated grid for military-condensed layout
   if (layout.name === 'Military Condensed') {
     return generateMilitaryCondensedGrid();
@@ -242,7 +247,12 @@ const CategorizedLetterGrid: React.FC<CategorizedLetterGridProps> = ({ layout, a
         <div key={rowIndex} className="flex" style={{ gap: '0', marginBottom: '0', height: `${100 / layout.gridHeight}%` }}>
           {row.map((letter, colIndex) => {
             const isActive = activePositions.has(`${rowIndex}-${colIndex}`);
-            const isEmpty = letter === ' ';
+            const isEmpty = letter === ' ' || letter === '.';
+            
+            // displayAllLetters controls which letters are shown
+            // When false (default): show only active time word letters  
+            // When true: show all grid letters (filler letters will be dimmed by isActive=false)
+            const shouldShow = fontSettings.displayAllLetters ? !isEmpty : isActive;
             
             return (
               <div
@@ -254,9 +264,9 @@ const CategorizedLetterGrid: React.FC<CategorizedLetterGridProps> = ({ layout, a
                 }}
               >
                 <VectorLetterCell
-                  letter={letter}
+                  letter={shouldShow ? letter : ' '}
                   isActive={isActive}
-                  isEmpty={isEmpty}
+                  isEmpty={!shouldShow}
                   fontSettings={fontSettings}
                   cellWidth={fontSettings.cellSpacingX}
                   cellHeight={fontSettings.cellSpacingY}
@@ -304,7 +314,12 @@ const LetterGrid: React.FC<LetterGridProps> = ({ layout, activeWords, fontSettin
         <div key={rowIndex} className="flex" style={{ gap: '0', marginBottom: '0', height: `${100 / layout.gridHeight}%` }}>
           {row.map((letter, colIndex) => {
             const isActive = activePositions.has(`${rowIndex}-${colIndex}`);
-            const isEmpty = letter === ' ';
+            const isEmpty = letter === ' ' || letter === '.';
+            
+            // displayAllLetters controls which letters are shown
+            // When false (default): show only active time word letters  
+            // When true: show all grid letters (filler letters will be dimmed by isActive=false)
+            const shouldShow = fontSettings.displayAllLetters ? !isEmpty : isActive;
             
             return (
               <div
@@ -316,9 +331,9 @@ const LetterGrid: React.FC<LetterGridProps> = ({ layout, activeWords, fontSettin
                 }}
               >
                 <VectorLetterCell
-                  letter={letter}
+                  letter={shouldShow ? letter : ' '}
                   isActive={isActive}
-                  isEmpty={isEmpty}
+                  isEmpty={!shouldShow}
                   fontSettings={fontSettings}
                   cellWidth={fontSettings.cellSpacingX}
                   cellHeight={fontSettings.cellSpacingY}

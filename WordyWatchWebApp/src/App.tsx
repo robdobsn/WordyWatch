@@ -29,7 +29,8 @@ function App() {
     centerHorizontally: true,
     useVectorPaths: true,
     addBorder: true,
-    addGridLines: false
+    addGridLines: false,
+    displayAllLetters: true
   });
 
   const currentTime = useCurrentTime(timeSettings.useCurrentTime);

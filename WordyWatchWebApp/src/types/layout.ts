@@ -12,6 +12,7 @@ export interface ClockLayout {
   gridWidth: number;
   gridHeight: number;
   words: WordPosition[];
+  gridData?: string[][]; // Optional full grid with all letters including fillers
 }
 
 export interface FontSettings {
@@ -28,6 +29,7 @@ export interface FontSettings {
   useVectorPaths: boolean;
   addBorder: boolean;
   addGridLines: boolean;
+  displayAllLetters: boolean;
 }
 
 export interface TimeSettings {

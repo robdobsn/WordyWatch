@@ -61,6 +61,7 @@ const DXFExport: React.FC<DXFExportProps> = ({ layout, fontSettings }) => {
         useVectorPaths: fontSettings.useVectorPaths,
         addBorder: fontSettings.addBorder,
         addGridLines: fontSettings.addGridLines,
+        displayAllLetters: fontSettings.displayAllLetters,
         testMode: testMode
       };
 

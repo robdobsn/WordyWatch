@@ -7,6 +7,12 @@ import { getFont, extractGlyphPath, pathToDXFEntities, createFallbackFont, creat
 
 // Create a letter grid from layout data (reusing logic from ClockDisplay.tsx)
 function createLetterGrid(layout: ClockLayout): string[][] {
+  // If layout has full grid data, use it directly
+  if (layout.gridData && layout.gridData.length > 0) {
+    return layout.gridData;
+  }
+  
+  // Otherwise build grid from words
   const grid: string[][] = Array(layout.gridHeight)
     .fill(null)
     .map(() => Array(layout.gridWidth).fill(' '));
@@ -43,6 +49,7 @@ interface DXFConfig {
   horizontalStretch?: number;    // Horizontal stretch factor (default 1.0)
   wStretch?: number;             // Additional stretch factor for W character (default 1.0)
   centerHorizontally?: boolean;  // Center letters horizontally in cells (default true)
+  displayAllLetters?: boolean;   // Display all letters or only those in words (default true)
 }
 
 const defaultConfig: DXFConfig = {
@@ -59,6 +66,7 @@ const defaultConfig: DXFConfig = {
   horizontalStretch: 1.55,
   wStretch: 0.9,
   centerHorizontally: true,
+  displayAllLetters: true,
 };
 
 // Entities-only DXF (the variant that worked in Fusion 360)
@@ -288,10 +296,29 @@ async function addVectorPaths(
   font: any,
   handleCounter: { value: number }
 ): Promise<void> {
+  // Build a set of positions that contain letters from actual words
+  const wordPositions = new Set<string>();
+  layout.words.forEach((wordPos: any) => {
+    const { word, startRow, startCol, direction } = wordPos;
+    for (let i = 0; i < word.length; i++) {
+      const row = direction === 'horizontal' ? startRow : startRow + i;
+      const col = direction === 'horizontal' ? startCol + i : startCol;
+      wordPositions.add(`${row}-${col}`);
+    }
+  });
+  
   for (let row = 0; row < layout.gridHeight; row++) {
     for (let col = 0; col < layout.gridWidth; col++) {
       const letter = grid[row][col];
       if (letter === ' ') continue;
+      
+      // When displayAllLetters is false, only export letters that are part of words
+      // When displayAllLetters is true, export all letters except spaces and periods
+      const displayAll = config.displayAllLetters ?? true;
+      const isInWord = wordPositions.has(`${row}-${col}`);
+      
+      if (!displayAll && !isInWord) continue;
+      if (displayAll && letter === '.') continue;
 
       // Calculate position (centered in cell)
       // DXF uses bottom-left origin, so we need to flip Y to maintain correct row order

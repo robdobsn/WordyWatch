@@ -326,6 +326,18 @@ const FontControls: React.FC<FontControlsProps> = ({ fontSettings, onFontChange 
               Grid Lines
             </span>
           </label>
+          
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fontSettings.displayAllLetters}
+              onChange={(e) => handleChange('displayAllLetters', e.target.checked)}
+              className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-1"
+            />
+            <span className="ml-1 text-xs text-gray-700">
+              Disp All
+            </span>
+          </label>
         </div>
       </div>
     </div>

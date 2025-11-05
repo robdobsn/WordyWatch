@@ -38,11 +38,15 @@ class GridAnalyzer {
     const gridWidth = Math.max(...this.grid.map(row => row.length));
     const gridHeight = this.grid.length;
     
+    // Convert grid strings to 2D array of characters
+    const gridData = this.grid.map(row => row.split(''));
+    
     return {
       name: 'Generated Layout',
       description: `Auto-generated layout from ${gridWidth}x${gridHeight} grid`,
       gridWidth,
       gridHeight,
+      gridData: gridData,
       words: this.foundWords
     };
   }
