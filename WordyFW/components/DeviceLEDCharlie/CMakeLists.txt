@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "DeviceLEDCharlie.cpp"
+        "LEDCharliePanel.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        RaftCore
+        driver
+)

@@ -1,0 +1,19 @@
+[package]
+name = "wordsearch_generator"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Advanced word search puzzle generator with intelligent optimization algorithms"
+authors = ["WordSearch Generator Contributors"]
+repository = "https://github.com/your-repo/wordsearch_generator"
+readme = "README.md"
+keywords = ["wordsearch", "puzzle", "optimization", "generator", "algorithm"]
+categories = ["games", "algorithms"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+rand = "0.8"

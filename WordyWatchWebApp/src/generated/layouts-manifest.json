@@ -1,0 +1,588 @@
+{
+  "generated": "2025-11-05T05:05:54.178Z",
+  "layouts": [
+    {
+      "name": "auto-layout",
+      "displayName": "Auto Layout",
+      "description": "Generated from new-grid.txt",
+      "gridWidth": 11,
+      "gridHeight": 11,
+      "wordCount": 30,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TWENTY",
+        "FIVE",
+        "TEN",
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "compact-vertical",
+      "displayName": "Compact Vertical",
+      "description": "Compact layout with mixed horizontal and vertical word orientations",
+      "gridWidth": 12,
+      "gridHeight": 20,
+      "wordCount": 34,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "category-based"
+      ],
+      "wordMappings": "standard",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": false,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "OH",
+        "FIVE",
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY"
+      ]
+    },
+    {
+      "name": "crossword-one",
+      "displayName": "Crossword Optimized",
+      "description": "Optimized crossword layout maximizing word intersections and letter sharing",
+      "gridWidth": 25,
+      "gridHeight": 16,
+      "wordCount": 37,
+      "features": [
+        "zero-word",
+        "category-based",
+        "composite-minutes"
+      ],
+      "wordMappings": "crossword",
+      "gridGeneration": "json-based",
+      "hasOH": false,
+      "hasZero": true,
+      "hasFragments": false,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "ZERO",
+        "FIVE",
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "TWENTYFIVE",
+        "THIRTY",
+        "THIRTYFIVE",
+        "FORTY",
+        "FORTYFIVE",
+        "FIFTY",
+        "FIFTYFIVE"
+      ]
+    },
+    {
+      "name": "gracegpt",
+      "displayName": "GraceGPT",
+      "description": "Compact 8x12 grid layout with mixed horizontal and vertical word orientations",
+      "gridWidth": 12,
+      "gridHeight": 8,
+      "wordCount": 24,
+      "features": [
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": false,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt2",
+      "displayName": "GraceGPT2",
+      "description": "Enhanced 8x14 grid layout with strategic word placement and intersections",
+      "gridWidth": 14,
+      "gridHeight": 8,
+      "wordCount": 21,
+      "features": [
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": false,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TWENTY",
+        "FIVE",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIFTEEN"
+      ]
+    },
+    {
+      "name": "gracegpt3",
+      "displayName": "Gracegpt3",
+      "description": "Generated from C:\\Users\\rob\\Documents\\rdev\\WordClockGrace\\grids\\gracegpt3.txt",
+      "gridWidth": 11,
+      "gridHeight": 11,
+      "wordCount": 28,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt3a",
+      "displayName": "Gracegpt3a",
+      "description": "Generated from C:\\Users\\rob\\Documents\\rdev\\WordClockGrace\\grids\\gracegpt3a.txt",
+      "gridWidth": 12,
+      "gridHeight": 11,
+      "wordCount": 30,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt4 copy",
+      "displayName": "Gracegpt4 copy",
+      "description": "Generated from C:\\Users\\rob\\Documents\\rdev\\WordClockGrace\\grids\\gracegpt4 copy.txt",
+      "gridWidth": 15,
+      "gridHeight": 11,
+      "wordCount": 21,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt4",
+      "displayName": "Gracegpt4",
+      "description": "Generated from grids/gracegpt4.txt",
+      "gridWidth": 11,
+      "gridHeight": 11,
+      "wordCount": 27,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt5",
+      "displayName": "Gracegpt5",
+      "description": "Generated from grids/gracegpt5.txt",
+      "gridWidth": 12,
+      "gridHeight": 11,
+      "wordCount": 26,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt6",
+      "displayName": "Gracegpt6",
+      "description": "Generated from grids/gracegpt6.txt",
+      "gridWidth": 12,
+      "gridHeight": 11,
+      "wordCount": 27,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt7",
+      "displayName": "Gracegpt7",
+      "description": "Generated from /home/rob/rdev/WordyWatch/WordyWatchWebApp/grids/gracegpt7.txt",
+      "gridWidth": 12,
+      "gridHeight": 11,
+      "wordCount": 30,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "gracegpt8",
+      "displayName": "Gracegpt8",
+      "description": "Generated from /home/rob/rdev/WordyWatch/WordyWatchWebApp/grids/gracegpt8.txt",
+      "gridWidth": 12,
+      "gridHeight": 11,
+      "wordCount": 31,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "TEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "TEN",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "graceopt1",
+      "displayName": "Graceopt1",
+      "description": "Generated from grids/graceopt1.txt",
+      "gridWidth": 13,
+      "gridHeight": 13,
+      "wordCount": 38,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "fragment-words",
+        "category-based",
+        "individual-minutes"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "individual",
+      "minuteWords": [
+        "FOUR",
+        "FORTY",
+        "SEVEN",
+        "THREE",
+        "TEN",
+        "TWENTY",
+        "TWO",
+        "FIVE",
+        "EIGHT",
+        "NINE",
+        "THIRTY",
+        "SIX",
+        "FIFTY",
+        "ONE"
+      ]
+    },
+    {
+      "name": "graceopt2",
+      "displayName": "Graceopt2",
+      "description": "Generated from C:\\Users\\rob\\Documents\\rdev\\WordClockGrace\\grids\\graceopt2.txt",
+      "gridWidth": 14,
+      "gridHeight": 12,
+      "wordCount": 25,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "FORTY",
+        "THIRTY",
+        "TEN",
+        "FIFTY",
+        "FIVE",
+        "TWENTY"
+      ]
+    },
+    {
+      "name": "graceopt3",
+      "displayName": "Graceopt3",
+      "description": "Generated from grids/graceopt3.txt",
+      "gridWidth": 14,
+      "gridHeight": 12,
+      "wordCount": 37,
+      "features": [
+        "oh-prefix",
+        "fragment-words",
+        "category-based",
+        "individual-minutes"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": false,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "individual",
+      "minuteWords": [
+        "FORTY",
+        "ELEVEN",
+        "SIX",
+        "TWO",
+        "ONE",
+        "TEN",
+        "THIRTY",
+        "EIGHT",
+        "THREE",
+        "FOUR",
+        "SEVEN",
+        "FIFTY",
+        "FIVE",
+        "TWELVE",
+        "NINE",
+        "TWENTY"
+      ]
+    },
+    {
+      "name": "military-condensed",
+      "displayName": "Military Condensed",
+      "description": "Condensed 15x15 grid with reusable word chunks for military time display",
+      "gridWidth": 15,
+      "gridHeight": 15,
+      "wordCount": 35,
+      "features": [
+        "zero-word",
+        "category-based"
+      ],
+      "wordMappings": "standard",
+      "gridGeneration": "json-based",
+      "hasOH": false,
+      "hasZero": true,
+      "hasFragments": false,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "ZERO",
+        "FIVE",
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIFTEEN",
+        "FORTY",
+        "FIVE"
+      ]
+    },
+    {
+      "name": "military-standard",
+      "displayName": "Military Standard",
+      "description": "Standard military time layout with horizontal and vertical words",
+      "gridWidth": 18,
+      "gridHeight": 16,
+      "wordCount": 34,
+      "features": [
+        "oh-prefix",
+        "zero-word",
+        "category-based"
+      ],
+      "wordMappings": "standard",
+      "gridGeneration": "json-based",
+      "hasOH": true,
+      "hasZero": true,
+      "hasFragments": false,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "OH",
+        "FIVE",
+        "TEN",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY"
+      ]
+    },
+    {
+      "name": "updated-layout",
+      "displayName": "Updated Layout",
+      "description": "Generated from test-grid.txt",
+      "gridWidth": 11,
+      "gridHeight": 11,
+      "wordCount": 21,
+      "features": [
+        "zero-word",
+        "fragment-words",
+        "category-based"
+      ],
+      "wordMappings": "fragment",
+      "gridGeneration": "json-based",
+      "hasOH": false,
+      "hasZero": true,
+      "hasFragments": true,
+      "hasCategories": true,
+      "minuteGranularity": "five-minute",
+      "minuteWords": [
+        "FIVE",
+        "FIFTEEN",
+        "TWENTY",
+        "THIRTY",
+        "FORTY",
+        "FIFTY",
+        "FIVE"
+      ]
+    }
+  ],
+  "summary": {
+    "total": 19,
+    "withOH": 14,
+    "withZero": 12,
+    "withFragments": 15,
+    "withCategories": 19
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "GraceGPT",
+  "description": "Compact 8x12 grid layout with mixed horizontal and vertical word orientations",
+  "gridWidth": 12,
+  "gridHeight": 8,
+  "words": [
+    {"word": "SIX", "startRow": 0, "startCol": 7, "direction": "horizontal", "category": "hour"},
+    {"word": "TWO", "startRow": 1, "startCol": 3, "direction": "horizontal", "category": "hour"},
+    {"word": "ONE", "startRow": 1, "startCol": 6, "direction": "horizontal", "category": "hour"},
+    {"word": "FOUR", "startRow": 2, "startCol": 4, "direction": "horizontal", "category": "hour"},
+    {"word": "THREE", "startRow": 3, "startCol": 2, "direction": "horizontal", "category": "hour"},
+    {"word": "FIVE", "startRow": 4, "startCol": 6, "direction": "horizontal", "category": "hour"},
+    {"word": "EIGHT", "startRow": 5, "startCol": 4, "direction": "horizontal", "category": "hour"},
+    {"word": "NINE", "startRow": 6, "startCol": 0, "direction": "horizontal", "category": "hour"},
+    {"word": "SEVEN", "startRow": 6, "startCol": 6, "direction": "horizontal", "category": "hour"},
+    {"word": "THIR", "startRow": 7, "startCol": 1, "direction": "horizontal", "category": "hour"},
+    {"word": "TEEN", "startRow": 7, "startCol": 8, "direction": "horizontal", "category": "hour"},
+    {"word": "ZERO", "startRow": 0, "startCol": 0, "direction": "horizontal", "category": "hour"},
+    {"word": "TEN", "startRow": 0, "startCol": 10, "direction": "horizontal", "category": "hour"},
+    {"word": "ELEVEN", "startRow": 1, "startCol": 9, "direction": "horizontal", "category": "hour"},
+    {"word": "TWELVE", "startRow": 3, "startCol": 2, "direction": "horizontal", "category": "hour"},
+    {"word": "FIF", "startRow": 2, "startCol": 0, "direction": "horizontal", "category": "hour"},
+    {"word": "TWENTY", "startRow": 4, "startCol": 1, "direction": "horizontal", "category": "hour"},
+    {"word": "HUNDRED", "startRow": 0, "startCol": 11, "direction": "vertical", "category": "military"},
+    {"word": "TEN", "startRow": 0, "startCol": 10, "direction": "vertical", "category": "minute"},
+    {"word": "TWENTY", "startRow": 4, "startCol": 1, "direction": "vertical", "category": "minute"},
+    {"word": "THIRTY", "startRow": 3, "startCol": 0, "direction": "vertical", "category": "minute"},
+    {"word": "FORTY", "startRow": 0, "startCol": 0, "direction": "vertical", "category": "minute"},
+    {"word": "FIFTY", "startRow": 0, "startCol": 0, "direction": "vertical", "category": "minute"},
+    {"word": "FIVE", "startRow": 4, "startCol": 6, "direction": "vertical", "category": "minute"}
+  ]
+}

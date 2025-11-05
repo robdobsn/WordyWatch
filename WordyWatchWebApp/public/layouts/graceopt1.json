@@ -1,0 +1,274 @@
+{
+  "name": "Graceopt1",
+  "description": "Generated from grids/graceopt1.txt",
+  "gridWidth": 13,
+  "gridHeight": 13,
+  "words": [
+    {
+      "word": "SIX",
+      "startRow": 0,
+      "startCol": 3,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "FIVE",
+      "startRow": 1,
+      "startCol": 0,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "THIR",
+      "startRow": 1,
+      "startCol": 5,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "ZERO",
+      "startRow": 3,
+      "startCol": 2,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "OH",
+      "startRow": 3,
+      "startCol": 5,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "ONE",
+      "startRow": 4,
+      "startCol": 2,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "FOUR",
+      "startRow": 4,
+      "startCol": 9,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "FIF",
+      "startRow": 4,
+      "startCol": 7,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "TWO",
+      "startRow": 5,
+      "startCol": 9,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "THREE",
+      "startRow": 5,
+      "startCol": 1,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "NINE",
+      "startRow": 6,
+      "startCol": 3,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "ELEVEN",
+      "startRow": 7,
+      "startCol": 1,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "EIGHT",
+      "startRow": 8,
+      "startCol": 2,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "TEN",
+      "startRow": 8,
+      "startCol": 6,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "TWELVE",
+      "startRow": 9,
+      "startCol": 0,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "TEEN",
+      "startRow": 10,
+      "startCol": 3,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "SEVEN",
+      "startRow": 11,
+      "startCol": 2,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "TWENTY",
+      "startRow": 12,
+      "startCol": 3,
+      "direction": "horizontal",
+      "category": "hour"
+    },
+    {
+      "word": "FOUR",
+      "startRow": 1,
+      "startCol": 0,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "TEEN",
+      "startRow": 9,
+      "startCol": 0,
+      "direction": "vertical",
+      "category": "hour"
+    },
+    {
+      "word": "FIF",
+      "startRow": 6,
+      "startCol": 0,
+      "direction": "vertical",
+      "category": "hour"
+    },
+    {
+      "word": "FORTY",
+      "startRow": 2,
+      "startCol": 1,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "OH",
+      "startRow": 4,
+      "startCol": 2,
+      "direction": "vertical",
+      "category": "connector"
+    },
+    {
+      "word": "SEVEN",
+      "startRow": 0,
+      "startCol": 3,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "THREE",
+      "startRow": 1,
+      "startCol": 4,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "TEN",
+      "startRow": 4,
+      "startCol": 5,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "TWENTY",
+      "startRow": 4,
+      "startCol": 6,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "TWO",
+      "startRow": 5,
+      "startCol": 7,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "FIVE",
+      "startRow": 0,
+      "startCol": 7,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "EIGHT",
+      "startRow": 8,
+      "startCol": 7,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "NINE",
+      "startRow": 8,
+      "startCol": 8,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "THIR",
+      "startRow": 2,
+      "startCol": 8,
+      "direction": "vertical",
+      "category": "hour"
+    },
+    {
+      "word": "THIRTY",
+      "startRow": 2,
+      "startCol": 8,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "SIX",
+      "startRow": 7,
+      "startCol": 9,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "FIF",
+      "startRow": 2,
+      "startCol": 9,
+      "direction": "vertical",
+      "category": "hour"
+    },
+    {
+      "word": "FIFTY",
+      "startRow": 2,
+      "startCol": 9,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "ONE",
+      "startRow": 5,
+      "startCol": 11,
+      "direction": "vertical",
+      "category": "minute"
+    },
+    {
+      "word": "HUNDRED",
+      "startRow": 0,
+      "startCol": 12,
+      "direction": "vertical",
+      "category": "military"
+    }
+  ]
+}
