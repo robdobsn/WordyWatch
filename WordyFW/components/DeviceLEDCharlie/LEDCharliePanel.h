@@ -72,7 +72,7 @@ private:
     uint16_t _width = 0;
     uint16_t _height = 0;
     uint32_t _refreshHz = 0;
-    size_t _numLEDs = 0;
+    uint16_t _numLEDs = 0;
 
     gptimer_handle_t _timer = nullptr;
     volatile size_t _scanIndex = 0;

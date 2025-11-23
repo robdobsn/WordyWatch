@@ -18,6 +18,8 @@
 #include "soc/gpio_reg.h"
 #include "soc/soc.h"
 
+#define DEBUG_LED_MASKS
+
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "LEDCharliePanel";
@@ -60,15 +62,6 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
         LOG_E(MODULE_PREFIX, "configure height %u exceeds pins-1", height);
         return false;
     }
-
-    std::vector<int> uniquePins = pins;
-    std::sort(uniquePins.begin(), uniquePins.end());
-    auto dupIt = std::adjacent_find(uniquePins.begin(), uniquePins.end());
-    if (dupIt != uniquePins.end())
-    {
-        LOG_E(MODULE_PREFIX, "configure duplicate pin %d", *dupIt);
-        return false;
-    }
     for (int pin : pins)
     {
         if (pin < 0 || pin > 31)
@@ -82,7 +75,7 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     _width = width;
     _height = height;
     _refreshHz = refreshHz > 0 ? refreshHz : 500;
-    _numLEDs = static_cast<size_t>(_width) * _height;
+    _numLEDs = _width * _height;
     if (_numLEDs == 0)
     {
         LOG_E(MODULE_PREFIX, "configure zero LEDs");
@@ -126,27 +119,35 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
             _ledMasks[ledIdx].hiMask = hiMask;
             _ledMasks[ledIdx].loMask = loMask;
             _ledMasks[ledIdx].enableMask = hiMask | loMask;
+
+#ifdef DEBUG_LED_MASKS
+            LOG_I(MODULE_PREFIX, "LED[%u,%u] idx %u hiPin %d loPin %d hiMask 0x%08X loMask 0x%08X enableMask 0x%08X",
+                col, row, ledIdx, hiGpio, loGpio,
+                _ledMasks[ledIdx].hiMask,
+                _ledMasks[ledIdx].loMask,
+                _ledMasks[ledIdx].enableMask);
+#endif
         }
     }
 
-    // Prepare GPIOs: default to inputs and cleared outputs
-    resetPinsToInputs();
-    REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
+    // // Prepare GPIOs: default to inputs and cleared outputs
+    // resetPinsToInputs();
+    // REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
 
-    uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
-    if (denom == 0)
-    {
-        LOG_E(MODULE_PREFIX, "configure denom zero for refresh");
-        return false;
-    }
-    uint64_t ticks = (_timerResolutionHz + denom - 1) / denom;
-    if (ticks == 0)
-        ticks = 1;
-    _ticksPerSlot = static_cast<uint32_t>(ticks);
+    // uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
+    // if (denom == 0)
+    // {
+    //     LOG_E(MODULE_PREFIX, "configure denom zero for refresh");
+    //     return false;
+    // }
+    // uint64_t ticks = (_timerResolutionHz + denom - 1) / denom;
+    // if (ticks == 0)
+    //     ticks = 1;
+    // _ticksPerSlot = static_cast<uint32_t>(ticks);
 
-    _scanIndex = 0;
-    _isConfigured = true;
-    _isRunning = false;
+    // _scanIndex = 0;
+    // _isConfigured = true;
+    // _isRunning = false;
 
     LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz slotTicks %u", 
         _width, _height, _pins.size(), _refreshHz, _ticksPerSlot);
@@ -156,35 +157,35 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
 
 bool LEDCharliePanel::start()
 {
-    if (!_isConfigured)
-    {
-        LOG_E(MODULE_PREFIX, "start called before configure");
-        return false;
-    }
-    if (_isRunning)
-        return true;
+    // if (!_isConfigured)
+    // {
+    //     LOG_E(MODULE_PREFIX, "start called before configure");
+    //     return false;
+    // }
+    // if (_isRunning)
+    //     return true;
 
-    if (!configureTimer())
-        return false;
+    // if (!configureTimer())
+    //     return false;
 
-    _isRunning = true;
+    // _isRunning = true;
     return true;
 }
 
 void LEDCharliePanel::stop()
 {
-    if (_isRunning && _timer)
-    {
-        gptimer_stop(_timer);
-    }
-    if (_timer)
-    {
-        gptimer_disable(_timer);
-        gptimer_del_timer(_timer);
-        _timer = nullptr;
-    }
-    _isRunning = false;
-    blankAllPins();
+    // if (_isRunning && _timer)
+    // {
+    //     gptimer_stop(_timer);
+    // }
+    // if (_timer)
+    // {
+    //     gptimer_disable(_timer);
+    //     gptimer_del_timer(_timer);
+    //     _timer = nullptr;
+    // }
+    // _isRunning = false;
+    // blankAllPins();
 }
 
 bool LEDCharliePanel::setPixel(uint16_t x, uint16_t y, bool on)

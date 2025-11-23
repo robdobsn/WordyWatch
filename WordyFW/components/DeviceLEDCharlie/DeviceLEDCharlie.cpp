@@ -16,6 +16,8 @@
 #include "DeviceTypeRecordDynamic.h"
 #include "APISourceInfo.h"
 
+#define DEBUG_DEVICE_LEDCHARLIE
+
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "DeviceLEDCharlie";
@@ -54,11 +56,11 @@ void DeviceLEDCharlie::loop()
     if (!_configured)
         return;
 
-    if (_autostart && !_panel.isRunning())
-    {
-        // Attempt restart if timer stopped unexpectedly
-        _panel.start();
-    }
+    // if (_autostart && !_panel.isRunning())
+    // {
+    //     // Attempt restart if timer stopped unexpectedly
+    //     _panel.start();
+    // }
 }
 
 void DeviceLEDCharlie::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
