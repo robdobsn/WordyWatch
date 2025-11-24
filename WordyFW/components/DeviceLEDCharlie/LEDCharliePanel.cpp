@@ -18,7 +18,7 @@
 #include "soc/gpio_reg.h"
 #include "soc/soc.h"
 
-#define DEBUG_LED_MASKS
+// #define DEBUG_LED_MASKS
 
 namespace
 {
@@ -135,16 +135,17 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     resetPinsToInputs();
     REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
 
-    // uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
-    // if (denom == 0)
-    // {
-    //     LOG_E(MODULE_PREFIX, "configure denom zero for refresh");
-    //     return false;
-    // }
-    // uint64_t ticks = (_timerResolutionHz + denom - 1) / denom;
-    // if (ticks == 0)
-    //     ticks = 1;
-    // _ticksPerSlot = static_cast<uint32_t>(ticks);
+    // Calculate ticks per slot
+    uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
+    if (denom == 0)
+    {
+        LOG_E(MODULE_PREFIX, "configure denom zero for refresh");
+        return false;
+    }
+    uint64_t ticks = (_timerResolutionHz + denom - 1) / denom;
+    if (ticks == 0)
+        ticks = 1;
+    _ticksPerSlot = static_cast<uint32_t>(ticks);
 
     _scanIndex = 0;
     _isConfigured = true;
@@ -158,35 +159,35 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
 
 bool LEDCharliePanel::start()
 {
-    // if (!_isConfigured)
-    // {
-    //     LOG_E(MODULE_PREFIX, "start called before configure");
-    //     return false;
-    // }
-    // if (_isRunning)
-    //     return true;
+    if (!_isConfigured)
+    {
+        LOG_E(MODULE_PREFIX, "start called before configure");
+        return false;
+    }
+    if (_isRunning)
+        return true;
 
-    // if (!configureTimer())
-    //     return false;
+    if (!configureTimer())
+        return false;
 
-    // _isRunning = true;
+    _isRunning = true;
     return true;
 }
 
 void LEDCharliePanel::stop()
 {
-    // if (_isRunning && _timer)
-    // {
-    //     gptimer_stop(_timer);
-    // }
-    // if (_timer)
-    // {
-    //     gptimer_disable(_timer);
-    //     gptimer_del_timer(_timer);
-    //     _timer = nullptr;
-    // }
-    // _isRunning = false;
-    // blankAllPins();
+    if (_isRunning && _timer)
+    {
+        gptimer_stop(_timer);
+    }
+    if (_timer)
+    {
+        gptimer_disable(_timer);
+        gptimer_del_timer(_timer);
+        _timer = nullptr;
+    }
+    _isRunning = false;
+    blankAllPins();
 }
 
 bool LEDCharliePanel::setPixel(uint16_t x, uint16_t y, bool on)
@@ -339,7 +340,10 @@ bool IRAM_ATTR LEDCharliePanel::onTimerAlarm(gptimer_handle_t /*timer*/,
 {
     auto* panel = static_cast<LEDCharliePanel*>(user_ctx);
     if (panel)
-        panel->driveNextFromISR();
+    {
+        panel->_timerCount++;
+        // panel->driveNextFromISR();
+    }
     return false;
 }
 

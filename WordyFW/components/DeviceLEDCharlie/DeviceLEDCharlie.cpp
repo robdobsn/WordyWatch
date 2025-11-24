@@ -16,8 +16,6 @@
 #include "DeviceTypeRecordDynamic.h"
 #include "APISourceInfo.h"
 
-// #define DEBUG_DEVICE_LEDCHARLIE
-
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "DeviceLEDCharlie";
@@ -55,6 +53,12 @@ void DeviceLEDCharlie::loop()
 {
     if (!_configured)
         return;
+
+    if (Raft::isTimeout(millis(), _debugLastMs, 1000))
+    {
+        _debugLastMs = millis();
+        LOG_I(MODULE_PREFIX, "loop: running=%d, timerCount=%u", _panel.isRunning() ? 1 : 0, _panel.getTimerCount());
+    }
 
     // if (_autostart && !_panel.isRunning())
     // {

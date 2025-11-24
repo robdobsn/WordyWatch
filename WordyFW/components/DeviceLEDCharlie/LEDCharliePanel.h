@@ -40,6 +40,8 @@ public:
     bool isRunning() const { return _isRunning; }
     void testAllLEDs();
 
+    uint32_t getTimerCount() const { return _timerCount; }
+
 private:
     struct LedMaskEntry
     {
@@ -73,6 +75,7 @@ private:
     uint16_t _height = 0;
     uint32_t _refreshHz = 0;
     uint16_t _numLEDs = 0;
+    uint32_t _timerCount = 0;
 
     gptimer_handle_t _timer = nullptr;
     volatile size_t _scanIndex = 0;

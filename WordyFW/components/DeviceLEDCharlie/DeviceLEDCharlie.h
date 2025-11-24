@@ -44,4 +44,6 @@ private:
     bool _configured = false;
     bool _autostart = true;
     uint32_t _lastMutateMs = 0;
+
+    uint32_t _debugLastMs = 0;
 };
