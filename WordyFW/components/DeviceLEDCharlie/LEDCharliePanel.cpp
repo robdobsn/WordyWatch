@@ -26,13 +26,14 @@ namespace
 }
 
 LEDCharliePanel::LEDCharliePanel()
-    : _fbLock(portMUX_INITIALIZER_UNLOCKED)
 {
+    RaftMutex_init(_fbLock);
 }
 
 LEDCharliePanel::~LEDCharliePanel()
 {
     stop();
+    RaftMutex_destroy(_fbLock);
 }
 
 bool LEDCharliePanel::configure(const std::vector<int>& pins,
@@ -193,9 +194,9 @@ bool LEDCharliePanel::setPixel(uint16_t x, uint16_t y, bool on)
     if (x >= _width || y >= _height || !_framebufferRaw)
         return false;
     size_t idx = static_cast<size_t>(x) * _height + y;
-    taskENTER_CRITICAL(&_fbLock);
+    RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     _framebuffer[idx] = on ? 1 : 0;
-    taskEXIT_CRITICAL(&_fbLock);
+    RaftMutex_unlock(_fbLock);
     return true;
 }
 
@@ -211,27 +212,27 @@ void LEDCharliePanel::clear()
 {
     if (!_framebufferRaw)
         return;
-    taskENTER_CRITICAL(&_fbLock);
+    RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::fill(_framebuffer.begin(), _framebuffer.end(), 0);
-    taskEXIT_CRITICAL(&_fbLock);
+    RaftMutex_unlock(_fbLock);
 }
 
 void LEDCharliePanel::fill(bool on)
 {
     if (!_framebufferRaw)
         return;
-    taskENTER_CRITICAL(&_fbLock);
+    RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::fill(_framebuffer.begin(), _framebuffer.end(), on ? 1 : 0);
-    taskEXIT_CRITICAL(&_fbLock);
+    RaftMutex_unlock(_fbLock);
 }
 
 void LEDCharliePanel::setAll(const std::vector<uint8_t>& frameBits)
 {
     if (!_framebufferRaw || frameBits.size() < _framebuffer.size())
         return;
-    taskENTER_CRITICAL(&_fbLock);
+    RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::memcpy(_framebuffer.data(), frameBits.data(), _framebuffer.size());
-    taskEXIT_CRITICAL(&_fbLock);
+    RaftMutex_unlock(_fbLock);
 }
 
 size_t LEDCharliePanel::getLitCount() const

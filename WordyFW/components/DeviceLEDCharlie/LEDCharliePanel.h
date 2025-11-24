@@ -10,11 +10,10 @@
 
 #include <cstdint>
 #include <vector>
-#include "freertos/FreeRTOS.h"
-#include "freertos/portmacro.h"
 #include "driver/gptimer.h"
 #include "esp_attr.h"
 #include "RaftArduino.h"
+#include "RaftThreading.h"
 
 class LEDCharliePanel
 {
@@ -80,5 +79,5 @@ private:
     volatile bool _isRunning = false;
     bool _isConfigured = false;
 
-    portMUX_TYPE _fbLock;
+    RaftMutex _fbLock;
 };
