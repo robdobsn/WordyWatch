@@ -111,9 +111,9 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
         for (uint16_t row = 0; row < _height; ++row)
         {
             size_t ledIdx = static_cast<size_t>(col) * _height + row;
-            size_t hiPinIdx = otherIndices[row];
-            int hiGpio = _pins[hiPinIdx];
-            int loGpio = _pins[col];
+            size_t loPinIdx = otherIndices[row];
+            int hiGpio = _pins[col];
+            int loGpio = _pins[loPinIdx];
             uint32_t hiMask = (1u << hiGpio);
             uint32_t loMask = (1u << loGpio);
             _ledMasks[ledIdx].hiMask = hiMask;
