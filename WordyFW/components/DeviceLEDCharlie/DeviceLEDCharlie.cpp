@@ -16,7 +16,7 @@
 #include "DeviceTypeRecordDynamic.h"
 #include "APISourceInfo.h"
 
-#define DEBUG_DEVICE_LEDCHARLIE
+// #define DEBUG_DEVICE_LEDCHARLIE
 
 namespace
 {
@@ -145,6 +145,11 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
     else if (command.equalsIgnoreCase("status"))
     {
         return Raft::setJsonResult(reqStr.c_str(), respStr, true, "", getStatusJSON().c_str());
+    }
+    else if (command.equalsIgnoreCase("testAllLEDs"))
+    {
+        _panel.testAllLEDs();
+        return Raft::setJsonBoolResult(reqStr.c_str(), respStr, true);
     }
 
     return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "unknownCommand");

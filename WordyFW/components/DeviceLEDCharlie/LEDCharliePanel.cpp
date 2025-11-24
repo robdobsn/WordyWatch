@@ -130,9 +130,9 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
         }
     }
 
-    // // Prepare GPIOs: default to inputs and cleared outputs
-    // resetPinsToInputs();
-    // REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
+    // Prepare GPIOs: default to inputs and cleared outputs
+    resetPinsToInputs();
+    REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
 
     // uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
     // if (denom == 0)
@@ -145,9 +145,9 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     //     ticks = 1;
     // _ticksPerSlot = static_cast<uint32_t>(ticks);
 
-    // _scanIndex = 0;
-    // _isConfigured = true;
-    // _isRunning = false;
+    _scanIndex = 0;
+    _isConfigured = true;
+    _isRunning = false;
 
     LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz slotTicks %u", 
         _width, _height, _pins.size(), _refreshHz, _ticksPerSlot);
@@ -376,5 +376,55 @@ void IRAM_ATTR LEDCharliePanel::driveNextFromISR()
     }
 
     _scanIndex = (_scanIndex + 1) % _numLEDs;
+}
+
+void LEDCharliePanel::testAllLEDs()
+{
+    if (!_isConfigured || _ledMasks.empty())
+    {
+        LOG_E(MODULE_PREFIX, "testAllLEDs: not configured");
+        return;
+    }
+
+    LOG_I(MODULE_PREFIX, "testAllLEDs: starting test of %u LEDs (width=%u, height=%u)", _numLEDs, _width, _height);
+
+    // Set all pins to input first
+    resetPinsToInputs();
+
+    for (uint16_t col = 0; col < _width; ++col)
+    {
+        for (uint16_t row = 0; row < _height; ++row)
+        {
+            size_t ledIdx = static_cast<size_t>(col) * _height + row;
+            
+            if (ledIdx >= _numLEDs)
+            {
+                LOG_E(MODULE_PREFIX, "LED[%u,%u] idx %u EXCEEDS _numLEDs %u!", col, row, ledIdx, _numLEDs);
+                continue;
+            }
+            
+            const LedMaskEntry& entry = _ledMasks[ledIdx];
+            
+            LOG_I(MODULE_PREFIX, "Testing LED[%u,%u] idx %u hiMask 0x%08X loMask 0x%08X", 
+                  col, row, ledIdx, entry.hiMask, entry.loMask);
+
+            // Turn on the LED: set hi pin high and lo pin low
+            REG_WRITE(GPIO_OUT_W1TS_REG, entry.hiMask);  // Set hi pin high
+            REG_WRITE(GPIO_OUT_W1TC_REG, entry.loMask);  // Set lo pin low
+            REG_WRITE(GPIO_ENABLE_W1TS_REG, entry.enableMask);  // Enable both pins
+            
+            // Keep LED on for 500 microseconds
+            delayMicroseconds(500);
+            
+            // Turn off the LED by setting pins back to input
+            REG_WRITE(GPIO_ENABLE_W1TC_REG, entry.enableMask);
+            REG_WRITE(GPIO_OUT_W1TC_REG, entry.enableMask);
+            
+            // Wait 10ms before next LED
+            delay(10);
+        }
+    }
+
+    LOG_I(MODULE_PREFIX, "testAllLEDs: test complete - tested %u LEDs", _width * _height);
 }
 

@@ -39,6 +39,7 @@ public:
     size_t getLitCount() const;
     bool isConfigured() const { return _isConfigured; }
     bool isRunning() const { return _isRunning; }
+    void testAllLEDs();
 
 private:
     struct LedMaskEntry

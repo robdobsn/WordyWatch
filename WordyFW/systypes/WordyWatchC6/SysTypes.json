@@ -168,8 +168,7 @@
   },
   "WebUI": "",
   "WordySysMod": {
-    "exampleGroup": {
-      "exampleKey": "Welcome to Raft!"
-    }
+    "pwrCtrlPin": 8,
+    "pwrOnLevel": 1
   }
 }
