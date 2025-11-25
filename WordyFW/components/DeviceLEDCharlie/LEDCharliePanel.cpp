@@ -39,7 +39,8 @@ LEDCharliePanel::~LEDCharliePanel()
 bool LEDCharliePanel::configure(const std::vector<int>& pins,
     uint16_t width,
     uint16_t height,
-    uint32_t refreshHz)
+    uint32_t refreshHz,
+    bool originFlip)    
 {
     stop();
 
@@ -75,7 +76,8 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     _pins = pins;
     _width = width;
     _height = height;
-    _refreshHz = refreshHz > 0 ? refreshHz : 500;
+    _originFlip = originFlip;
+    _refreshHz = refreshHz > 0 ? refreshHz : 50;
     _numLEDs = _width * _height;
     if (_numLEDs == 0)
     {
@@ -111,7 +113,7 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
 
         for (uint16_t row = 0; row < _height; ++row)
         {
-            size_t ledIdx = static_cast<size_t>(col) * _height + row;
+            size_t ledIdx = _originFlip ? static_cast<size_t>(col) * _height + (_height - 1 - row) : static_cast<size_t>(col) * _height + row;
             size_t loPinIdx = otherIndices[row];
             int hiGpio = _pins[col];
             int loGpio = _pins[loPinIdx];
@@ -136,23 +138,31 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     REG_WRITE(GPIO_OUT_W1TC_REG, _pinMaskAll);
 
     // Calculate ticks per slot
-    uint64_t denom = static_cast<uint64_t>(_refreshHz) * static_cast<uint64_t>(_numLEDs);
-    if (denom == 0)
+    uint64_t denom = static_cast<uint64_t>(_numLEDs);
+    if ((denom == 0) || (_refreshHz == 0))
     {
         LOG_E(MODULE_PREFIX, "configure denom zero for refresh");
         return false;
     }
+
+    // Assume around 1/10 LEDs on at once
+    // denom /= 10;
+
+    // Calculate ticks per slot
+    denom = static_cast<uint64_t>(_refreshHz) * denom;
+
+    // Tick resolution
     uint64_t ticks = (_timerResolutionHz + denom - 1) / denom;
     if (ticks == 0)
         ticks = 1;
-    _ticksPerSlot = static_cast<uint32_t>(ticks);
+    _ticksPerAlarm = static_cast<uint32_t>(ticks);
 
     _scanIndex = 0;
     _isConfigured = true;
     _isRunning = false;
 
-    LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz slotTicks %u", 
-        _width, _height, _pins.size(), _refreshHz, _ticksPerSlot);
+    LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz ticksPerAlarm %u", 
+        _width, _height, _pins.size(), _refreshHz, _ticksPerAlarm);
 
     return true;
 }
@@ -274,7 +284,7 @@ bool LEDCharliePanel::configureTimer()
     }
 
     gptimer_alarm_config_t alarm = {};
-    alarm.alarm_count = _ticksPerSlot;
+    alarm.alarm_count = _ticksPerAlarm;
     alarm.reload_count = 0;
     alarm.flags.auto_reload_on_alarm = true;
 
@@ -338,49 +348,40 @@ bool IRAM_ATTR LEDCharliePanel::onTimerAlarm(gptimer_handle_t /*timer*/,
     const gptimer_alarm_event_data_t* /*event_data*/,
     void* user_ctx)
 {
+    // Get panel instance from user context
     auto* panel = static_cast<LEDCharliePanel*>(user_ctx);
-    if (panel)
+    if (panel && !panel->_testSuppressISR)
     {
         panel->_timerCount++;
-        // panel->driveNextFromISR();
+
+        // Clear all outputs by making all pins inputs
+        REG_WRITE(GPIO_ENABLE_W1TC_REG, panel->_pinMaskAll);
+        REG_WRITE(GPIO_OUT_W1TC_REG, panel->_pinMaskAll);
+
+        // Get current LED index
+        const LedMaskEntry& entry = panel->_ledMasks[panel->_curLEDIdx];
+
+        // Turn on the LED: set hi pin high and lo pin low
+        if (panel->_framebufferRaw[panel->_curLEDIdx] && (panel->_ledOnOffCount == 0))
+        {
+            REG_WRITE(GPIO_OUT_W1TS_REG, entry.hiMask);  // Set hi pin high
+            REG_WRITE(GPIO_OUT_W1TC_REG, entry.loMask);  // Set lo pin low
+            REG_WRITE(GPIO_ENABLE_W1TS_REG, entry.enableMask);  // Enable both pins
+        }
+
+        // Update on/off count
+        panel->_ledOnOffCount++;
+        if (panel->_ledOnOffCount >= 1)
+        {
+            panel->_ledOnOffCount = 0;
+
+            // Advance to next LED
+            panel->_curLEDIdx++;
+            if (panel->_curLEDIdx >= panel->_numLEDs)
+                panel->_curLEDIdx = 0;
+        }
     }
     return false;
-}
-
-void IRAM_ATTR LEDCharliePanel::driveNextFromISR()
-{
-    if (!_isConfigured || !_maskRaw || !_framebufferRaw)
-    {
-        blankAllPins();
-        return;
-    }
-
-    blankAllPins();
-
-    if (_numLEDs == 0)
-        return;
-
-    size_t idx = _scanIndex;
-    size_t iterations = 0;
-    while (iterations < _numLEDs)
-    {
-        if (idx >= _numLEDs)
-            idx = 0;
-        if (_framebufferRaw[idx])
-        {
-            const LedMaskEntry& entry = _maskRaw[idx];
-            REG_WRITE(GPIO_OUT_W1TS_REG, entry.hiMask);
-            REG_WRITE(GPIO_ENABLE_W1TS_REG, entry.enableMask);
-            _scanIndex = idx + 1;
-            if (_scanIndex >= _numLEDs)
-                _scanIndex = 0;
-            return;
-        }
-        idx++;
-        iterations++;
-    }
-
-    _scanIndex = (_scanIndex + 1) % _numLEDs;
 }
 
 void LEDCharliePanel::testAllLEDs()
@@ -392,6 +393,11 @@ void LEDCharliePanel::testAllLEDs()
     }
 
     LOG_I(MODULE_PREFIX, "testAllLEDs: starting test of %u LEDs (width=%u, height=%u)", _numLEDs, _width, _height);
+
+    // Suppress ISR activity during test
+    _testSuppressISR = 1;
+    // Allow any in-progress ISR to complete
+    delay(10);
 
     // Set all pins to input first
     resetPinsToInputs();
@@ -425,10 +431,16 @@ void LEDCharliePanel::testAllLEDs()
             REG_WRITE(GPIO_ENABLE_W1TC_REG, entry.enableMask);
             REG_WRITE(GPIO_OUT_W1TC_REG, entry.enableMask);
             
-            // Wait 10ms before next LED
-            delay(10);
+            // Wait before next LED
+            delay(50);
         }
     }
+
+    // Clear all pins at end of test
+    resetPinsToInputs();
+
+    // Resume ISR activity
+    _testSuppressISR = 0;
 
     LOG_I(MODULE_PREFIX, "testAllLEDs: test complete - tested %u LEDs", _width * _height);
 }

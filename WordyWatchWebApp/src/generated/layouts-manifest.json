@@ -1,5 +1,5 @@
 {
-  "generated": "2025-11-05T05:23:59.271Z",
+  "generated": "2025-11-25T05:48:01.932Z",
   "layouts": [
     {
       "name": "auto-layout",
@@ -354,7 +354,7 @@
     {
       "name": "gracegpt8",
       "displayName": "Gracegpt8",
-      "description": "Generated from /home/rob/rdev/WordyWatch/WordyWatchWebApp/grids/gracegpt8.txt",
+      "description": "Generated from grids/gracegpt8.txt",
       "gridWidth": 12,
       "gridHeight": 11,
       "wordCount": 31,

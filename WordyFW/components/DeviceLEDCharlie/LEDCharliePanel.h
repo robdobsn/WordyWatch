@@ -21,7 +21,8 @@ public:
     LEDCharliePanel();
     ~LEDCharliePanel();
 
-    bool configure(const std::vector<int>& pins, uint16_t width, uint16_t height, uint32_t refreshHz);
+    bool configure(const std::vector<int>& pins, uint16_t width, uint16_t height, 
+            uint32_t refreshHz, bool originFlip);
     bool start();
     void stop();
 
@@ -54,7 +55,7 @@ private:
         const gptimer_alarm_event_data_t* event_data,
         void* user_ctx);
 
-    void driveNextFromISR();
+    // void driveNextFromISR();
     void blankAllPins() const;
 
     void destroyTimer();
@@ -69,13 +70,18 @@ private:
     LedMaskEntry* _maskRaw = nullptr;
 
     uint32_t _pinMaskAll = 0;
-    uint32_t _ticksPerSlot = 0;
+    uint32_t _ticksPerAlarm = 0;
     uint32_t _timerResolutionHz = 1000000;
     uint16_t _width = 0;
     uint16_t _height = 0;
+    bool _originFlip = false;
     uint32_t _refreshHz = 0;
     uint16_t _numLEDs = 0;
     uint32_t _timerCount = 0;
+
+    uint32_t _curLEDIdx = 0;
+    uint32_t _ledOnOffCount = 0;
+    volatile uint32_t _testSuppressISR = 0; 
 
     gptimer_handle_t _timer = nullptr;
     volatile size_t _scanIndex = 0;

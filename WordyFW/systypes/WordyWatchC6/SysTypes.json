@@ -19,8 +19,8 @@
         {
           "i2cFreq": 100000,
           "name": "I2CA",
-          "sclPin": 23,
-          "sdaPin": 22,
+          "sclPin": 5,
+          "sdaPin": 6,
           "type": "I2C"
         }
       ]
@@ -32,8 +32,9 @@
         "name": "LEDPanel",
         "width": 12,
         "height": 11,
-        "refreshHz": 800,
+        "refreshHz": 50,
         "autoStart": 1,
+        "originFlip": 1,
         "pins": [10, 11, 18, 19, 20, 22, 23, 21, 7, 4, 3, 15]
       }
     ]

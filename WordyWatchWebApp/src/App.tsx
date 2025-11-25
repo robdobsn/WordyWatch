@@ -3,6 +3,7 @@ import ClockDisplay from './components/ClockDisplay';
 import TimeControls from './components/TimeControls';
 import FontControls from './components/FontControls';
 import DXFExport from './components/DXFExport';
+import CHeaderExport from './components/CHeaderExport';
 import { useLayout } from './hooks/useLayout';
 import { useCurrentTime } from './hooks/useCurrentTime';
 import { FontSettings, TimeSettings } from './types/layout';
@@ -133,6 +134,11 @@ function App() {
             />
             
             <DXFExport layout={layout} fontSettings={fontSettings} />
+            
+            <CHeaderExport 
+              layout={layout} 
+              layoutMetadata={getLayoutMetadata(layout.name.toLowerCase().replace(/\s+/g, '-'))}
+            />
             
             {/* Layout Info - Inline with controls */}
             <div className="bg-white p-2 rounded-lg shadow-sm border">
