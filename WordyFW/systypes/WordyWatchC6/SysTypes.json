@@ -33,6 +33,7 @@
         "width": 12,
         "height": 11,
         "refreshHz": 50,
+        "scanMinSeqLen": 20,
         "autoStart": 1,
         "originFlip": 1,
         "pins": [10, 11, 18, 19, 20, 22, 23, 21, 7, 4, 3, 15]

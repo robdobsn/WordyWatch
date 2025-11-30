@@ -40,6 +40,7 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     uint16_t width,
     uint16_t height,
     uint32_t refreshHz,
+    uint32_t scanMinSeqLen,
     bool originFlip)    
 {
     stop();
@@ -78,6 +79,7 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     _height = height;
     _originFlip = originFlip;
     _refreshHz = refreshHz > 0 ? refreshHz : 50;
+    _scanMinSeqLen = scanMinSeqLen;
     _numLEDs = _width * _height;
     if (_numLEDs == 0)
     {
@@ -92,6 +94,7 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     _ledMasks.clear();
     _ledMasks.resize(_numLEDs);
     _framebuffer.assign(_numLEDs, 0);
+    _litLEDIndices.assign(_numLEDs, -1);
     _framebufferRaw = _framebuffer.data();
     _maskRaw = _ledMasks.data();
 
@@ -161,8 +164,8 @@ bool LEDCharliePanel::configure(const std::vector<int>& pins,
     _isConfigured = true;
     _isRunning = false;
 
-    LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz ticksPerAlarm %u", 
-        _width, _height, _pins.size(), _refreshHz, _ticksPerAlarm);
+    LOG_I(MODULE_PREFIX, "configured width %u height %u pins %u refresh %uHz scanMinSeqLen %u ticksPerAlarm %u", 
+        _width, _height, _pins.size(), _refreshHz, _scanMinSeqLen, _ticksPerAlarm);
 
     return true;
 }
@@ -207,6 +210,7 @@ bool LEDCharliePanel::setPixel(uint16_t x, uint16_t y, bool on)
     size_t idx = static_cast<size_t>(x) * _height + y;
     RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     _framebuffer[idx] = on ? 1 : 0;
+    updateLitLEDIndices();
     RaftMutex_unlock(_fbLock);
     return true;
 }
@@ -225,6 +229,7 @@ void LEDCharliePanel::clear()
         return;
     RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::fill(_framebuffer.begin(), _framebuffer.end(), 0);
+    updateLitLEDIndices();
     RaftMutex_unlock(_fbLock);
 }
 
@@ -234,6 +239,7 @@ void LEDCharliePanel::fill(bool on)
         return;
     RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::fill(_framebuffer.begin(), _framebuffer.end(), on ? 1 : 0);
+    updateLitLEDIndices();
     RaftMutex_unlock(_fbLock);
 }
 
@@ -243,6 +249,7 @@ void LEDCharliePanel::setAll(const std::vector<uint8_t>& frameBits)
         return;
     RaftMutex_lock(_fbLock, RAFT_MUTEX_WAIT_FOREVER);
     std::memcpy(_framebuffer.data(), frameBits.data(), _framebuffer.size());
+    updateLitLEDIndices();
     RaftMutex_unlock(_fbLock);
 }
 
@@ -358,30 +365,46 @@ bool IRAM_ATTR LEDCharliePanel::onTimerAlarm(gptimer_handle_t /*timer*/,
         REG_WRITE(GPIO_ENABLE_W1TC_REG, panel->_pinMaskAll);
         REG_WRITE(GPIO_OUT_W1TC_REG, panel->_pinMaskAll);
 
-        // Get current LED index
-        const LedMaskEntry& entry = panel->_ledMasks[panel->_curLEDIdx];
-
-        // Turn on the LED: set hi pin high and lo pin low
-        if (panel->_framebufferRaw[panel->_curLEDIdx] && (panel->_ledOnOffCount == 0))
+        // Get the next lit LED index
+        int32_t litLEDIdx = panel->_litLEDIndices[panel->_curSequenceIdx];
+        if (litLEDIdx >= 0)
         {
+        
+            // Get current LED index
+            const LedMaskEntry& entry = panel->_ledMasks[litLEDIdx];
+
+            // Turn on the LED: set hi pin high and lo pin low
             REG_WRITE(GPIO_OUT_W1TS_REG, entry.hiMask);  // Set hi pin high
             REG_WRITE(GPIO_OUT_W1TC_REG, entry.loMask);  // Set lo pin low
             REG_WRITE(GPIO_ENABLE_W1TS_REG, entry.enableMask);  // Enable both pins
         }
 
-        // Update on/off count
-        panel->_ledOnOffCount++;
-        if (panel->_ledOnOffCount >= 1)
-        {
-            panel->_ledOnOffCount = 0;
+        // Advance to next in sequence
+        panel->_curSequenceIdx++;
 
-            // Advance to next LED
-            panel->_curLEDIdx++;
-            if (panel->_curLEDIdx >= panel->_numLEDs)
-                panel->_curLEDIdx = 0;
-        }
+        // Wrap around if at end of all LEDs or no more lit LEDs and scan minimum sequence length already achieved
+        if ((panel->_curSequenceIdx >= panel->_numLEDs) || ((litLEDIdx < 0) && panel->_curSequenceIdx >= panel->_scanMinSeqLen))
+        // if (panel->_curSequenceIdx >= panel->_numLEDs)
+            panel->_curSequenceIdx = 0;
     }
     return false;
+}
+
+void LEDCharliePanel::updateLitLEDIndices()
+{
+    size_t litIdx = 0;
+    for (size_t i = 0; i < _numLEDs; ++i)
+    {
+        if (_framebuffer[i])
+        {
+            _litLEDIndices[litIdx++] = static_cast<int32_t>(i);
+        }
+    }
+    // Mark remaining entries as -1
+    for (size_t i = litIdx; i < _numLEDs; ++i)
+    {
+        _litLEDIndices[i] = -1;
+    }
 }
 
 void LEDCharliePanel::testAllLEDs()
@@ -445,3 +468,22 @@ void LEDCharliePanel::testAllLEDs()
     LOG_I(MODULE_PREFIX, "testAllLEDs: test complete - tested %u LEDs", _width * _height);
 }
 
+// Debug
+void LEDCharliePanel::debugPrintLedSequence() const
+{
+    LOG_I(MODULE_PREFIX, "LED sequence (total %u):", _numLEDs);
+    for (size_t i = 0; i < _numLEDs; ++i)
+    {
+        int32_t ledIdx = _litLEDIndices[i];
+        if (ledIdx >= 0)
+        {
+            const LedMaskEntry& entry = _ledMasks[ledIdx];
+            LOG_I(MODULE_PREFIX, "  SeqIdx %u: LEDIdx %d hiMask 0x%08X loMask 0x%08X", 
+                i, ledIdx, entry.hiMask, entry.loMask);
+        }
+        else
+        {
+            LOG_I(MODULE_PREFIX, "  SeqIdx %u: UNUSED", i);
+        }
+    }
+}

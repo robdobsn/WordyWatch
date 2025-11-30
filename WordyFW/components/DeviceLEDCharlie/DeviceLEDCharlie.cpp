@@ -58,7 +58,7 @@ void DeviceLEDCharlie::loop()
     if (Raft::isTimeout(millis(), _debugLastMs, 1000))
     {
         _debugLastMs = millis();
-        LOG_I(MODULE_PREFIX, "loop: running=%d, timerCount=%u", _panel.isRunning() ? 1 : 0, _panel.getTimerCount());
+        LOG_I(MODULE_PREFIX, "loop: running=%d, timerCount=%u", _panel.isRunning() ? 1 : 0, _panel.debugGetTimerCount());
     }
 
     // if (_autostart && !_panel.isRunning())
@@ -209,6 +209,7 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
             }
         }
         _lastMutateMs = millis();
+        // _panel.debugPrintLedSequence();
         String json = "{\"hour\":" + String(pattern->hour) +
             ",\"minute\":" + String(pattern->minute) + "}";
         return Raft::setJsonResult(reqStr.c_str(), respStr, true, "", json.c_str());
@@ -222,6 +223,7 @@ bool DeviceLEDCharlie::applyConfiguration()
     uint16_t width = static_cast<uint16_t>(deviceConfig.getInt("width", 0));
     uint16_t height = static_cast<uint16_t>(deviceConfig.getInt("height", 0));
     uint32_t refreshHz = static_cast<uint32_t>(deviceConfig.getInt("refreshHz", 800));
+    uint32_t scanMinSeqLen = static_cast<uint32_t>(deviceConfig.getInt("scanMinSeqLen", 20));
     bool originFlip = deviceConfig.getBool("originFlip", false);
     _autostart = deviceConfig.getBool("autoStart", true);
 
@@ -233,7 +235,7 @@ bool DeviceLEDCharlie::applyConfiguration()
         return false;
     }
 
-    bool ok = _panel.configure(pinList, width, height, refreshHz, originFlip);
+    bool ok = _panel.configure(pinList, width, height, refreshHz, scanMinSeqLen, originFlip);
     if (!ok)
         return false;
 

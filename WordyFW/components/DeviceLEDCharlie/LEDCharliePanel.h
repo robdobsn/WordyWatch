@@ -22,7 +22,7 @@ public:
     ~LEDCharliePanel();
 
     bool configure(const std::vector<int>& pins, uint16_t width, uint16_t height, 
-            uint32_t refreshHz, bool originFlip);
+            uint32_t refreshHz, uint32_t scanMinSeqLen, bool originFlip);
     bool start();
     void stop();
 
@@ -31,6 +31,9 @@ public:
     void clear();
     void fill(bool on);
     void setAll(const std::vector<uint8_t>& frameBits);
+
+    /// @brief Update the sequence of lit LED indices based on the current framebuffer
+    void updateLitLEDIndices();
 
     uint16_t getWidth() const { return _width; }
     uint16_t getHeight() const { return _height; }
@@ -41,7 +44,9 @@ public:
     bool isRunning() const { return _isRunning; }
     void testAllLEDs();
 
-    uint32_t getTimerCount() const { return _timerCount; }
+    // Debug
+    void debugPrintLedSequence() const;
+    uint32_t debugGetTimerCount() const { return _timerCount; }
 
 private:
     struct LedMaskEntry
@@ -62,9 +67,18 @@ private:
     bool configureTimer();
     void resetPinsToInputs() const;
 
+    // Configuration
     std::vector<int> _pins;
     std::vector<LedMaskEntry> _ledMasks;
     std::vector<uint8_t> _framebuffer;
+
+    // This is updated each time the framebuffer is changed with the sequence of
+    // lit LED indices with the unused entries set to -1
+    std::vector<int32_t> _litLEDIndices;
+
+    // Minimum sequence length for scanning (to attempt constant brightness for different
+    // numbers of lit LEDs)
+    size_t _scanMinSeqLen = 0;
 
     volatile uint8_t* _framebufferRaw = nullptr;
     LedMaskEntry* _maskRaw = nullptr;
@@ -79,8 +93,10 @@ private:
     uint16_t _numLEDs = 0;
     uint32_t _timerCount = 0;
 
-    uint32_t _curLEDIdx = 0;
-    uint32_t _ledOnOffCount = 0;
+    // Current sequence index for lit LED being driven
+    uint32_t _curSequenceIdx = 0;
+
+    // Test flag to suppress ISR activity
     volatile uint32_t _testSuppressISR = 0; 
 
     gptimer_handle_t _timer = nullptr;
