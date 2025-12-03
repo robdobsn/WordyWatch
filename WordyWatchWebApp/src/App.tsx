@@ -3,6 +3,7 @@ import ClockDisplay from './components/ClockDisplay';
 import TimeControls from './components/TimeControls';
 import FontControls from './components/FontControls';
 import DXFExport from './components/DXFExport';
+import SVGExport from './components/SVGExport';
 import CHeaderExport from './components/CHeaderExport';
 import { useLayout } from './hooks/useLayout';
 import { useCurrentTime } from './hooks/useCurrentTime';
@@ -18,15 +19,15 @@ function App() {
   });
 
   const [fontSettings, setFontSettings] = useState<FontSettings>({
-    family: 'Ruler Stencil Regular, Arial, sans-serif',
+    family: 'Arial, sans-serif',
     weight: '700',
     size: 2,
     cellSpacingX: 2.5,
-    cellSpacingY: 3,
+    cellSpacingY: 3.0,
     margin: 2,
-    letterPaddingPercent: 0.1,
-    horizontalStretch: 1.55,
-    wStretch: 0.9,
+    letterPaddingPercent: 0.25,
+    horizontalStretch: 0.85,
+    wStretch: 0.8,
     centerHorizontally: true,
     useVectorPaths: true,
     addBorder: true,
@@ -134,6 +135,8 @@ function App() {
             />
             
             <DXFExport layout={layout} fontSettings={fontSettings} />
+            
+            <SVGExport layout={layout} fontSettings={fontSettings} />
             
             <CHeaderExport 
               layout={layout} 

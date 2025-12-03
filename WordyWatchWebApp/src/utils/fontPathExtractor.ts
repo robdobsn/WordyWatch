@@ -231,13 +231,13 @@ export function pathToDXFEntities(path: opentype.Path, offsetX: number, offsetY:
           const endY = -(command as any).y + offsetY; // Flip Y coordinate for DXF
           
           // Convert cubic bezier to points
-          // Using 8 segments initially - simplification will optimize further
+          // Using 32 segments for high-quality smooth curves
           const bezierPoints = cubicBezierToPoints(
             currentX, currentY,
             cp1X, cp1Y,
             cp2X, cp2Y,
             endX, endY,
-            8
+            32
           );
           
           // Add all points except the first (already added)
@@ -256,12 +256,12 @@ export function pathToDXFEntities(path: opentype.Path, offsetX: number, offsetY:
           const qendY = -(command as any).y + offsetY; // Flip Y coordinate for DXF
           
           // Convert quadratic bezier to points
-          // Using 6 segments initially - simplification will optimize further
+          // Using 24 segments for high-quality smooth curves
           const quadPoints = quadraticBezierToPoints(
             currentX, currentY,
             qcpX, qcpY,
             qendX, qendY,
-            6
+            24
           );
           
           // Add all points except the first (already added)
@@ -302,10 +302,11 @@ export function pathToDXFEntities(path: opentype.Path, offsetX: number, offsetY:
         }
         
         // Simplify the polyline to reduce point count while maintaining shape
+        // Using smaller tolerances to preserve high-quality curves
         let simplifiedPoints = validPoints;
         try {
-          simplifiedPoints = removeColinearPoints(validPoints, 0.01);
-          simplifiedPoints = simplifyPolyline(simplifiedPoints, 0.02);
+          simplifiedPoints = removeColinearPoints(validPoints, 0.001);
+          simplifiedPoints = simplifyPolyline(simplifiedPoints, 0.005);
           
           // Validate simplified points
           simplifiedPoints = simplifiedPoints.filter(p => 
