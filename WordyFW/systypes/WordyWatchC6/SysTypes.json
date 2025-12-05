@@ -1,27 +1,159 @@
 {
-  "BLEMan": {
-    "advIntervalMs": 100,
-    "busConnName": "BusBLE",
-    "central": false,
-    "connIntvPrefMs": 15,
-    "enable": 1,
-    "nimLogLev": "E",
-    "peripheral": true,
-    "scanBTHome": 1,
-    "uuidCmdRespCommand": "bb76677e-9cfd-4626-a510-0d305be57c8e",
-    "uuidCmdRespResponse": "bb76677e-9cfd-4626-a510-0d305be57c8f",
-    "uuidCmdRespService": "bb76677e-9cfd-4626-a510-0d305be57c8d"
-  },
+  "SystemName": "Wordy Watch",
+  "Manufacturer": "Rob Dobson",
   "CmdsAtStart": "",
+  "SysManager": {
+    "monitorPeriodMs": 10000,
+    "reportList": [
+      "NetMan",
+      "SysMan"
+    ],
+    "slowSysModMs": 100,
+    "pauseWiFiforBLE": 1,
+    "supervisorEnable": 1,
+    "loopAllSysMods": 1
+  },
+  "ProtExchg": {
+    "enable": 0,
+    "RICSerial": {
+      "FrameBound": "0xE7",
+      "CtrlEscape": "0xD7"
+    }
+  },
+  "NetMan": {
+    "enable": 0,
+    "wifiSTAEn": 0,
+    "wifiAPEn": 0,
+    "ethEn": 0,
+    "wifiSSID": "",
+    "wifiPW": "",
+    "wifiSTAScanThreshold": "OPEN",
+    "wifiAPSSID": "",
+    "wifiAPPW": "",
+    "wifiAPChannel": 1,
+    "wifiAPMaxConn": 4,
+    "wifiAPAuthMode": "WPA2_PSK",
+    "NTPServer": "pool.ntp.org",
+    "timezone": "UTC",
+    "logLevel": "D"
+  },
+  "ESPOTAUpdate": {
+    "enable": 0,
+    "OTADirect": 1
+  },
+  "SerialConsole": {
+    "enable": 1,
+    "uartNum": 0,
+    "rxBuf": 5000,
+    "txBuf": 1500,
+    "crlfOnTx": 1,
+    "protocol": "RICSerial",
+    "logLevel": "D"
+  },
+  "CommandSerial": {
+    "enable": 0,
+    "logLevel": "D",
+    "ports": []
+  },
+  "CommandSocket": {
+    "enable": 0,
+    "socketPort": 24,
+    "protocol": "RICSerial",
+    "logLevel": "D"
+  },
+  "FileManager": {
+    "enable": 0,
+    "LocalFsDefault": "littlefs",
+    "LocalFSFormatIfCorrupt": 1,
+    "CacheFileSysInfo": 0,
+    "SDEnabled": 0,
+    "DefaultSD": 1,
+    "SDMOSI": 15,
+    "SDMISO": 4,
+    "SDCLK": 14,
+    "SDCS": 13
+  },
+  "BLEMan": {
+    "enable": 1,
+    "central": 0,
+    "peripheral": 1,
+    "outQSize": 15,
+    "minMsBetweenSends": 100,
+    "sendUseInd": 0,
+    "advIntervalMs": 20,
+    "connIntvPrefMs": 15,
+    "uuidCmdRespService": "aa76677e-9cfd-4626-a510-0d305be57c8d",
+    "uuidCmdRespCommand": "aa76677e-9cfd-4626-a510-0d305be57c8e",
+    "uuidCmdRespResponse": "aa76677e-9cfd-4626-a510-0d305be57c8f",
+    "stdServices": [
+      {
+        "name": "Battery",
+        "enable": 1,
+        "notify": 1,
+        "read": 1,
+        "updateIntervalMs": 30000,
+        "settings": {
+          "sysMod": "Jewelry",
+          "namedValue": "batteryPC"
+        }
+      },
+      {
+        "name": "HeartRate",
+        "enable": 1,
+        "notify": 1,
+        "read": 1,
+        "updateIntervalMs": 500,
+        "settings": {
+          "sysMod": "Jewelry",
+          "namedValue": "heartRate"
+        }
+      },
+      {
+        "name": "DeviceInfo",
+        "enable": 1,
+        "read": 1
+      }
+    ],
+    "logLevel": "D",
+    "nimLogLev": "E"
+  },
+  "Publish": {
+    "enable": 1,
+    "pubList": [
+      {
+        "topic": "devjson",
+        "trigger": "Change",
+        "minStateChangeMs": 10,
+        "rates": []
+      },
+      {
+        "topic": "devbin",
+        "trigger": "Change",
+        "minStateChangeMs": 10,
+        "rates": []
+      }
+    ]
+  },
+  "SamplesJSON": {
+    "enable": 0,
+    "rateLimHz": 0,
+    "maxJsonLen": 0,
+    "jsonHdr": "{\"name\":\"hrmdata\"}",
+    "apiName": "hrmsamples",
+    "allocAtStart": true,
+    "dumpToConsole": true,
+    "maxFileSize": 1000000
+  },
   "DevMan": {
     "Buses": {
       "buslist": [
         {
-          "i2cFreq": 100000,
           "name": "I2CA",
-          "sclPin": 5,
+          "type": "I2C",
           "sdaPin": 6,
-          "type": "I2C"
+          "sclPin": 5,
+          "i2cFreq": 100000,
+          "loopYieldMs": 20
         }
       ]
     },
@@ -36,141 +168,38 @@
         "scanMinSeqLen": 12,
         "autoStart": 1,
         "originFlip": 1,
-        "pins": [10, 11, 18, 19, 20, 22, 23, 21, 7, 4, 3, 15]
-      }
-    ]
-  },
-  "ESPOTAUpdate": {
-    "OTADirect": 1,
-    "enable": 1
-  },
-  "FileManager": {
-    "CacheFileSysInfo": 0,
-    "DefaultSD": 1,
-    "LocalFSFormatIfCorrupt": 1,
-    "LocalFsDefault": "littlefs",
-    "SDCLK": 14,
-    "SDCS": 13,
-    "SDEnabled": 0,
-    "SDMISO": 4,
-    "SDMOSI": 15
-  },
-  "LogManager": {
-    "enable": 0,
-    "logDests": [
-      {
-        "enable": false,
-        "host": "xxxxx.papertrailapp.com",
-        "port": 12345,
-        "type": "Papertrail"
-      }
-    ]
-  },
-  "MQTTMan": {
-    "brokerHostname": "mqttbroker",
-    "brokerPort": 1883,
-    "clientID": "",
-    "enable": 0,
-    "topics": [
-      {
-        "inbound": 1,
-        "name": "examplein",
-        "path": "example/in",
-        "qos": 1
+        "pins": [
+          10,
+          11,
+          18,
+          19,
+          20,
+          22,
+          23,
+          21,
+          7,
+          4,
+          3,
+          15
+        ]
       },
       {
-        "inbound": 0,
-        "name": "exampleout",
-        "path": "example/out",
-        "qos": 1
+        "enable": 1,
+        "class": "PowerControl",
+        "name": "PowerControl",
+        "powerCtrlPin": 8,
+        "vsensePin": 2,
+        "batteryLowV": 3.55,
+        "vsenseButtonLevel": 2300,
+        "buttonOffTimeMs": 2000,
+        "adcCalib": {
+          "v1": 3.5,
+          "a1": 1434,
+          "v2": 4.2,
+          "a2": 1718
+        }
       }
     ]
   },
-  "NetMan": {
-    "NTPServer": "pool.ntp.org",
-    "ethEn": 0,
-    "logLevel": "D",
-    "timezone": "UTC",
-    "wifiAPAuthMode": "WPA2_PSK",
-    "wifiAPChannel": 1,
-    "wifiAPEn": 1,
-    "wifiAPMaxConn": 4,
-    "wifiAPPW": "raftpassword",
-    "wifiAPSSID": "RaftAP",
-    "wifiPW": "",
-    "wifiSSID": "",
-    "wifiSTAEn": 1,
-    "wifiSTAScanThreshold": "OPEN"
-  },
-  "ProtExchg": {
-    "RICSerial": {
-      "CtrlEscape": "0xD7",
-      "FrameBound": "0xE7"
-    }
-  },
-  "Publish": {
-    "enable": 1,
-    "pubList": [
-      {
-        "minStateChangeMs": 10,
-        "rates": [],
-        "topic": "devjson",
-        "trigger": "Change"
-      },
-      {
-        "minStateChangeMs": 10,
-        "rates": [],
-        "topic": "devbin",
-        "trigger": "Change"
-      }
-    ]
-  },
-  "SerialConsole": {
-    "crlfOnTx": 1,
-    "enable": 1,
-    "logLevel": "D",
-    "protocol": "RICSerial",
-    "rxBuf": 5000,
-    "txBuf": 1500,
-    "uartNum": 0
-  },
-  "SysManager": {
-    "monitorPeriodMs": 10000,
-    "reportList": [
-      "NetMan",
-      "SysMan"
-    ],
-    "slowSysModMs": 50
-  },
-  "SysTypeName": "WordyWatchC6",
-  "WebServer": {
-    "apiPrefix": "api/",
-    "enable": 1,
-    "fileServer": 1,
-    "logLevel": "D",
-    "numConnSlots": 12,
-    "sendMax": 5000,
-    "staticFilePaths": "",
-    "stdRespHeaders": [
-      "Access-Control-Allow-Origin: *"
-    ],
-    "taskCore": 0,
-    "taskPriority": 9,
-    "taskStack": 5000,
-    "webServerPort": 80,
-    "websockets": [
-      {
-        "maxConn": 4,
-        "pcol": "RICSerial",
-        "pfix": "ws",
-        "pingMs": 30000,
-        "txQueueMax": 20
-      }
-    ]
-  },
-  "WebUI": "",
-  "WordySysMod": {
-    "pwrCtrlPin": 8,
-    "pwrOnLevel": 1
-  }
+  "WordySysMod": {}
 }

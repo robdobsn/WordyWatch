@@ -19,7 +19,7 @@ class DeviceLEDCharlie : public RaftDevice
 {
 public:
     DeviceLEDCharlie(const char* pClassName, const char* pDevConfigJson);
-    ~DeviceLEDCharlie() override;
+    virtual ~DeviceLEDCharlie() override;
 
     static RaftDevice* create(const char* pClassName, const char* pDevConfigJson)
     {
@@ -41,7 +41,7 @@ private:
     bool applyConfiguration();
 
     LEDCharliePanel _panel;
-    bool _configured = false;
+    bool _isConfigured = false;
     bool _autostart = true;
     uint32_t _lastMutateMs = 0;
 

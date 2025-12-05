@@ -50,11 +50,22 @@ function createLetterGrid(layout: ClockLayout): string[][] {
   return grid;
 }
 
+// Mounting features options
+export interface MountingOptions {
+  outerWidth: number;
+  outerHeight: number;
+  holeSpacingWidth: number;
+  holeSpacingHeight: number;
+  holeDiameter: number;
+  cornerRadius: number;
+}
+
 // Generate SVG content that matches the UI display using vector paths
 export async function generateSVG(
   layout: ClockLayout,
   fontSettings: FontSettings,
-  flipHorizontal: boolean = false
+  flipHorizontal: boolean = false,
+  mountingOptions?: MountingOptions
 ): Promise<string> {
   const grid = createLetterGrid(layout);
   const fontName = mapFontFamilyToFontName(fontSettings.family);
@@ -79,9 +90,23 @@ export async function generateSVG(
   const totalHeight = layout.gridHeight * cellHeight;
   const margin = fontSettings.margin || 2;
   
-  // SVG dimensions with margin
-  const svgWidth = totalWidth + 2 * margin;
-  const svgHeight = totalHeight + 2 * margin;
+  // Base SVG dimensions (text area with margin)
+  const textAreaWidth = totalWidth + 2 * margin;
+  const textAreaHeight = totalHeight + 2 * margin;
+  
+  // Final SVG dimensions (with mounting features if specified)
+  let svgWidth = textAreaWidth;
+  let svgHeight = textAreaHeight;
+  let borderOffsetX = 0;
+  let borderOffsetY = 0;
+  
+  if (mountingOptions) {
+    svgWidth = mountingOptions.outerWidth;
+    svgHeight = mountingOptions.outerHeight;
+    // Calculate equal borders on each side
+    borderOffsetX = (svgWidth - textAreaWidth) / 2;
+    borderOffsetY = (svgHeight - textAreaHeight) / 2;
+  }
   
   // Calculate target letter height based on cell height and padding
   // This matches both DXF export and VectorLetterCell logic
@@ -95,6 +120,9 @@ export async function generateSVG(
   svg += `<!-- Auto-generated from Wordy Watch UI -->\n`;
   svg += `<!-- Layout: ${layout.name} -->\n`;
   svg += `<!-- Grid: ${layout.gridWidth}x${layout.gridHeight}, Cell: ${cellWidth}x${cellHeight}mm -->\n`;
+  if (mountingOptions) {
+    svg += `<!-- Outer dimensions: ${svgWidth}x${svgHeight}mm -->\n`;
+  }
   svg += `<svg\n`;
   svg += `  width="${svgWidth}mm"\n`;
   svg += `  height="${svgHeight}mm"\n`;
@@ -106,8 +134,31 @@ export async function generateSVG(
   const flipTransform = flipHorizontal ? `translate(${svgWidth}, 0) scale(-1, 1)` : '';
   svg += `  <g${flipTransform ? ` transform="${flipTransform}"` : ''}>\n`;
   
-  // Background - solid black rectangle covering entire display area
-  svg += `    <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" fill="#000000" stroke="none"/>\n`;
+  // Background - solid black rounded rectangle
+  if (mountingOptions) {
+    svg += `    <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" rx="${mountingOptions.cornerRadius}" ry="${mountingOptions.cornerRadius}" fill="#000000" stroke="none"/>\n`;
+    
+    // Add mounting holes (white circles to cut through black background)
+    const centerX = svgWidth / 2;
+    const centerY = svgHeight / 2;
+    const halfSpacingW = mountingOptions.holeSpacingWidth / 2;
+    const halfSpacingH = mountingOptions.holeSpacingHeight / 2;
+    const radius = mountingOptions.holeDiameter / 2;
+    
+    // Four corners of the hole spacing rectangle
+    const holes = [
+      { x: centerX - halfSpacingW, y: centerY - halfSpacingH }, // Top-left
+      { x: centerX + halfSpacingW, y: centerY - halfSpacingH }, // Top-right
+      { x: centerX - halfSpacingW, y: centerY + halfSpacingH }, // Bottom-left
+      { x: centerX + halfSpacingW, y: centerY + halfSpacingH }, // Bottom-right
+    ];
+    
+    holes.forEach((hole) => {
+      svg += `    <circle cx="${hole.x}" cy="${hole.y}" r="${radius}" fill="#ffffff" stroke="none"/>\n`;
+    });
+  } else {
+    svg += `    <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" fill="#000000" stroke="none"/>\n`;
+  }
   
   // Grid lines (if enabled)
   if (fontSettings.addGridLines) {
@@ -115,14 +166,14 @@ export async function generateSVG(
     
     // Vertical lines
     for (let col = 0; col <= layout.gridWidth; col++) {
-      const x = margin + col * cellWidth;
-      svg += `      <line x1="${x}" y1="${margin}" x2="${x}" y2="${margin + totalHeight}"/>\n`;
+      const x = borderOffsetX + margin + col * cellWidth;
+      svg += `      <line x1="${x}" y1="${borderOffsetY + margin}" x2="${x}" y2="${borderOffsetY + margin + totalHeight}"/>\n`;
     }
     
     // Horizontal lines
     for (let row = 0; row <= layout.gridHeight; row++) {
-      const y = margin + row * cellHeight;
-      svg += `      <line x1="${margin}" y1="${y}" x2="${margin + totalWidth}" y2="${y}"/>\n`;
+      const y = borderOffsetY + margin + row * cellHeight;
+      svg += `      <line x1="${borderOffsetX + margin}" y1="${y}" x2="${borderOffsetX + margin + totalWidth}" y2="${y}"/>\n`;
     }
     
     svg += `    </g>\n`;
@@ -163,9 +214,9 @@ export async function generateSVG(
       if (!displayAll && !isInWord) continue;
       if (isEmpty) continue;
       
-      // Calculate cell position (top-left corner)
-      const cellX = margin + colIndex * cellWidth;
-      const cellY = margin + rowIndex * cellHeight;
+      // Calculate cell position (top-left corner) with border offset
+      const cellX = borderOffsetX + margin + colIndex * cellWidth;
+      const cellY = borderOffsetY + margin + rowIndex * cellHeight;
       
       // Calculate cell center
       const cx = cellX + cellWidth / 2;
@@ -236,10 +287,11 @@ export async function downloadSVG(
   layout: ClockLayout,
   filename: string,
   fontSettings: FontSettings,
-  flipHorizontal: boolean = false
+  flipHorizontal: boolean = false,
+  mountingOptions?: MountingOptions
 ): Promise<void> {
   try {
-    const svgContent = await generateSVG(layout, fontSettings, flipHorizontal);
+    const svgContent = await generateSVG(layout, fontSettings, flipHorizontal, mountingOptions);
     
     // Create blob and download
     const blob = new Blob([svgContent], { type: 'image/svg+xml' });

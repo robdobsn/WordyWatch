@@ -11,6 +11,7 @@
 #include "BusI2C.h"
 #include "DeviceFactory.h"
 #include "DeviceLEDCharlie.h"
+#include "PowerControl.h"
 
 // Create the app
 RaftCoreApp raftCoreApp;
@@ -27,6 +28,9 @@ extern "C" void app_main(void)
 
     // Register charlie LED device
     deviceFactory.registerDevice("LEDCharlie", DeviceLEDCharlie::create);
+
+    // Power control device
+    deviceFactory.registerDevice("PowerControl", PowerControl::create);
 
     // Register sysmod
     raftCoreApp.registerSysMod("WordySysMod", WordySysMod::create, true);

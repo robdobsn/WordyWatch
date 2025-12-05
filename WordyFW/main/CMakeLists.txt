@@ -10,4 +10,5 @@ idf_component_register(
         RaftI2C
         WordySysMod
         DeviceLEDCharlie
+        PowerControl
 )

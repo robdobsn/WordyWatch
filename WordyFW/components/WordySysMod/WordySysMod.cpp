@@ -18,11 +18,11 @@ WordySysMod::~WordySysMod()
 
 void WordySysMod::setup()
 {
-    int pwrCtrlPin = config.getInt("pwrCtrlPin", -1);
-    int pwrOnLevel = config.getInt("pwrOnLevel", -1);
-    pinMode(pwrCtrlPin, OUTPUT);
-    digitalWrite(pwrCtrlPin, pwrOnLevel);
-    LOG_I(MODULE_PREFIX, "Power Control Pin: %d, Power On Level: %d", pwrCtrlPin, pwrOnLevel);
+    // int pwrCtrlPin = config.getInt("pwrCtrlPin", -1);
+    // int pwrOnLevel = config.getInt("pwrOnLevel", -1);
+    // pinMode(pwrCtrlPin, OUTPUT);
+    // digitalWrite(pwrCtrlPin, pwrOnLevel);
+    // LOG_I(MODULE_PREFIX, "Power Control Pin: %d, Power On Level: %d", pwrCtrlPin, pwrOnLevel);
 }
 
 void WordySysMod::loop()

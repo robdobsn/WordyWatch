@@ -34,8 +34,8 @@ DeviceLEDCharlie::~DeviceLEDCharlie()
 
 void DeviceLEDCharlie::setup()
 {
-    _configured = applyConfiguration();
-    if (!_configured)
+    _isConfigured = applyConfiguration();
+    if (!_isConfigured)
     {
         LOG_E(MODULE_PREFIX, "setup configuration failed");
         return;
@@ -52,7 +52,7 @@ void DeviceLEDCharlie::setup()
 
 void DeviceLEDCharlie::loop()
 {
-    if (!_configured)
+    if (!_isConfigured)
         return;
 
     if (Raft::isTimeout(millis(), _debugLastMs, 1000))
@@ -91,7 +91,7 @@ String DeviceLEDCharlie::getStatusJSON() const
         ",\"height\":" + String(_panel.getHeight()) +
         ",\"refreshHz\":" + String(_panel.getRefreshHz()) +
         ",\"lit\":" + String(_panel.getLitCount()) +
-        ",\"configured\":" + String(_configured ? 1 : 0) +
+        ",\"configured\":" + String(_isConfigured ? 1 : 0) +
         ",\"running\":" + String(_panel.isRunning() ? 1 : 0) +
         "}";
     return json;

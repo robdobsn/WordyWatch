@@ -30,6 +30,13 @@ const SVGExport: React.FC<SVGExportProps> = ({ layout, fontSettings }) => {
   const [filename, setFilename] = useState('wordclock-grid');
   const [isExporting, setIsExporting] = useState(false);
   const [flipHorizontal, setFlipHorizontal] = useState(false);
+  const [addMountingFeatures, setAddMountingFeatures] = useState(false);
+  const [outerWidth, setOuterWidth] = useState(37.8);
+  const [outerHeight, setOuterHeight] = useState(37.8);
+  const [holeSpacingWidth, setHoleSpacingWidth] = useState(32);
+  const [holeSpacingHeight, setHoleSpacingHeight] = useState(32);
+  const [holeDiameter, setHoleDiameter] = useState(1.6);
+  const [cornerRadius, setCornerRadius] = useState(2);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -47,7 +54,16 @@ const SVGExport: React.FC<SVGExportProps> = ({ layout, fontSettings }) => {
     setIsExporting(true);
     
     try {
-      await downloadSVG(layout, filename, fontSettings, flipHorizontal);
+      const mountingOptions = addMountingFeatures ? {
+        outerWidth,
+        outerHeight,
+        holeSpacingWidth,
+        holeSpacingHeight,
+        holeDiameter,
+        cornerRadius
+      } : undefined;
+      
+      await downloadSVG(layout, filename, fontSettings, flipHorizontal, mountingOptions);
       showToast(`SVG file "${filename}.svg" downloaded`, 'success');
     } catch (error) {
       console.error('Export error:', error);
@@ -113,6 +129,99 @@ const SVGExport: React.FC<SVGExportProps> = ({ layout, fontSettings }) => {
             Flip Horizontal (Mirror)
           </span>
         </label>
+
+        {/* Mounting Features Toggle */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={addMountingFeatures}
+            onChange={(e) => setAddMountingFeatures(e.target.checked)}
+            className="w-3 h-3 rounded"
+          />
+          <span className="text-xs text-gray-700">
+            Add Mounting Features
+          </span>
+        </label>
+
+        {/* Mounting Features Options */}
+        {addMountingFeatures && (
+          <div className="pl-5 space-y-2 border-l-2 border-gray-200">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Outer Width (mm)
+                </label>
+                <input
+                  type="number"
+                  value={outerWidth}
+                  onChange={(e) => setOuterWidth(parseFloat(e.target.value) || 37.8)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Outer Height (mm)
+                </label>
+                <input
+                  type="number"
+                  value={outerHeight}
+                  onChange={(e) => setOuterHeight(parseFloat(e.target.value) || 37.8)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Hole Spacing W (mm)
+                </label>
+                <input
+                  type="number"
+                  value={holeSpacingWidth}
+                  onChange={(e) => setHoleSpacingWidth(parseFloat(e.target.value) || 32)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Hole Spacing H (mm)
+                </label>
+                <input
+                  type="number"
+                  value={holeSpacingHeight}
+                  onChange={(e) => setHoleSpacingHeight(parseFloat(e.target.value) || 32)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Hole Diameter (mm)
+                </label>
+                <input
+                  type="number"
+                  value={holeDiameter}
+                  onChange={(e) => setHoleDiameter(parseFloat(e.target.value) || 1.6)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Corner Radius (mm)
+                </label>
+                <input
+                  type="number"
+                  value={cornerRadius}
+                  onChange={(e) => setCornerRadius(parseFloat(e.target.value) || 2)}
+                  step="0.1"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Compact info */}
         <p className="text-xs text-gray-500 leading-tight">
