@@ -12,8 +12,8 @@
 #include "RaftUtils.h"
 #include "esp_sleep.h"
 
-// #define DEBUG_USER_BUTTON_PRESS
-// #define DEBUG_POWER_CONTROL
+#define DEBUG_USER_BUTTON_PRESS
+#define DEBUG_POWER_CONTROL
 
 namespace
 {

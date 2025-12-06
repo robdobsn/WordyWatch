@@ -109,6 +109,14 @@
         }
       },
       {
+        "name": "CurrentTime",
+        "enable": 1,
+        "read": 1,
+        "write": 1,
+        "notify": 0,
+        "updateIntervalMs": 0
+      },
+      {
         "name": "DeviceInfo",
         "enable": 1,
         "read": 1
