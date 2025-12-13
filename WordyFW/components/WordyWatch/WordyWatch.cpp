@@ -1,12 +1,12 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Power control
+// Wordy Watch
 //
-// Rob Dobson 2023
+// Rob Dobson 2025
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "PowerControl.h"
+#include "WordyWatch.h"
 #include "RaftJsonIF.h"
 #include "ConfigPinMap.h"
 #include "RaftUtils.h"
@@ -17,24 +17,24 @@
 
 namespace
 {
-    static constexpr const char* MODULE_PREFIX = "PowerControl";
+    static constexpr const char* MODULE_PREFIX = "WordyWatch";
 }
 
-/// @brief Constructor for PowerControl
-/// @param pClassName Class name
-/// @param pDevConfigJson Device configuration JSON
-PowerControl::PowerControl(const char* pClassName, const char* pDevConfigJson)
-    : RaftDevice(pClassName, pDevConfigJson)
+/// @brief Constructor for WordyWatch
+/// @param pModuleName Module name
+/// @param sysConfig System configuration interface
+WordyWatch::WordyWatch(const char *pModuleName, RaftJsonIF& sysConfig)
+    : RaftSysMod(pModuleName, sysConfig)
 {
 }
 
-/// @brief Destructor for PowerControl
-PowerControl::~PowerControl()
+/// @brief Destructor for WordyWatch
+WordyWatch::~WordyWatch()
 {
 }
 
-/// @brief Setup the PowerControl device
-void PowerControl::setup()
+/// @brief Setup the WordyWatch device
+void WordyWatch::setup()
 {
     _isConfigured = applyConfiguration();
     if (!_isConfigured)
@@ -43,8 +43,8 @@ void PowerControl::setup()
     }
 }
 
-/// @brief Main loop for the PowerControl device (called frequently)
-void PowerControl::loop()
+/// @brief Main loop for the WordyWatch device (called frequently)
+void WordyWatch::loop()
 {
     // Update VSENSE average
     if (_vsensePin < 0)
@@ -156,10 +156,10 @@ void PowerControl::loop()
 
 /// @brief Apply configuration
 /// @return true if configuration applied successfully
-bool PowerControl::applyConfiguration()
+bool WordyWatch::applyConfiguration()
 {
     // Get power control pin
-    String pinName = deviceConfig.getString("powerCtrlPin", "");
+    String pinName = config.getString("powerCtrlPin", "");
     _powerCtrlPin = ConfigPinMap::getPinFromName(pinName.c_str());
 
     // Set power control pin to ensure power remains on
@@ -171,7 +171,7 @@ bool PowerControl::applyConfiguration()
     }
 
     // Setup VSENSE pin
-    pinName = deviceConfig.getString("vsensePin", "");
+    pinName = config.getString("vsensePin", "");
     _vsensePin = ConfigPinMap::getPinFromName(pinName.c_str());
     if (_vsensePin >= 0)
     {
@@ -180,21 +180,21 @@ bool PowerControl::applyConfiguration()
     }
 
     // Get battery low voltage
-    _batteryLowV = deviceConfig.getDouble("batteryLowV", BATTERY_LOW_V_DEFAULT);
+    _batteryLowV = config.getDouble("batteryLowV", BATTERY_LOW_V_DEFAULT);
 
     // Get VSENSE button level
-    _vsenseButtonLevel = deviceConfig.getLong("vsenseButtonLevel", VSENSE_BUTTON_LEVEL_DEFAULT);
+    _vsenseButtonLevel = config.getLong("vsenseButtonLevel", VSENSE_BUTTON_LEVEL_DEFAULT);
 
     // Get button off time
-    _buttonOffTimeMs = deviceConfig.getLong("buttonOffTimeMs", 2000);
+    _buttonOffTimeMs = config.getLong("buttonOffTimeMs", 2000);
 
     // Get ADC calibration
     _vsenseSlope = VSENSE_SLOPE_DEFAULT;
     _vsenseIntercept = VSENSE_INTERCEPT_DEFAULT;
-    double v1 = deviceConfig.getDouble("adcCalib/v1", 0);
-    int a1 = deviceConfig.getLong("adcCalib/a1", 0);
-    double v2 = deviceConfig.getDouble("adcCalib/v2", 0);
-    int a2 = deviceConfig.getLong("adcCalib/a2", 0);
+    double v1 = config.getDouble("adcCalib/v1", 0);
+    int a1 = config.getLong("adcCalib/a1", 0);
+    double v2 = config.getDouble("adcCalib/v2", 0);
+    int a2 = config.getLong("adcCalib/a2", 0);
     LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d", 
                 _powerCtrlPin, _vsensePin, v1, a1, v2, a2);
 
@@ -228,14 +228,14 @@ bool PowerControl::applyConfiguration()
 /// @brief Convert ADC reading to voltage
 /// @param adcReading ADC reading value
 /// @return Calculated voltage
-float PowerControl::getVoltageFromADCReading(uint32_t adcReading) const
+float WordyWatch::getVoltageFromADCReading(uint32_t adcReading) const
 {
     // Convert to voltage
     return adcReading * _vsenseSlope + _vsenseIntercept;
 }
 
 /// @brief Handle shutdown
-void PowerControl::shutdown()
+void WordyWatch::shutdown()
 {
     // Shutdown
     digitalWrite(_powerCtrlPin, LOW);
@@ -248,23 +248,13 @@ void PowerControl::shutdown()
 
 /// @brief Add REST API endpoints
 /// @param endpointManager Manager for REST API endpoints
-void PowerControl::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
+void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
 {
-}
-
-/// @brief Get time of last device status update
-/// @param includeElemOnlineStatusChanges Include element online status changes in the status update time
-/// @param includePollDataUpdates Include poll data updates in the status update time
-/// @return Time of last device status update in milliseconds
-uint32_t PowerControl::getDeviceInfoTimestampMs(bool /*includeElemOnlineStatusChanges*/,
-    bool includePollDataUpdates) const
-{
-    return 0;
 }
 
 /// @brief Get the device status as JSON
 /// @return JSON string
-String PowerControl::getStatusJSON() const
+String WordyWatch::getStatusJSON() const
 {
     String json = "{\"vSense\":" + String(analogRead(_vsensePin)) +
         ",\"avgVSense\":" + String(_vsenseAvg.getAverage()) +
@@ -274,19 +264,4 @@ String PowerControl::getStatusJSON() const
         ",\"buttonLevel\":" + String(_vsenseButtonLevel) +
         "}";
     return json;
-}
-
-/// @brief Get the device status as binary
-/// @return Binary status vector
-std::vector<uint8_t> PowerControl::getStatusBinary() const
-{
-    return {};
-}
-
-/// @brief Get the device type record for this device so that it can be added to the device type records
-/// @param devTypeRec (out) Device type record
-/// @return true if the device has a device type record
-bool PowerControl::getDeviceTypeRecord(DeviceTypeRecordDynamic& /*devTypeRec*/) const
-{
-    return false;
 }

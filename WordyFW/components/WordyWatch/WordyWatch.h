@@ -1,8 +1,8 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Power control
+// Wordy Watch
 //
-// Rob Dobson 2023-2025
+// Rob Dobson 2025
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -10,32 +10,27 @@
 
 #include <stdint.h>
 #include "SimpleMovingAverage.h"
-#include "RaftDevice.h"
+#include "RaftSysMod.h"
 
 class RaftJsonIF;
 
-class PowerControl : public RaftDevice
+class WordyWatch : public RaftSysMod
 {
 public:
-    PowerControl(const char* pClassName, const char* pDevConfigJson);
-    virtual ~PowerControl() override;
+    WordyWatch(const char* pModuleName, RaftJsonIF& sysConfig);
+    virtual ~WordyWatch();
 
     // Create function
-    static RaftDevice* create(const char* pClassName, const char* pDevConfigJson)
+    static RaftSysMod* create(const char* pModuleName, RaftJsonIF& sysConfig)
     {
-        return new PowerControl(pClassName, pDevConfigJson);
+        return new WordyWatch(pModuleName, sysConfig);
     }
 
-    void setup() override final;
-    void loop() override final;
-    void addRestAPIEndpoints(RestAPIEndpointManager& endpointManager) override final;
-
-    uint32_t getDeviceInfoTimestampMs(bool includeElemOnlineStatusChanges,
-        bool includePollDataUpdates) const override final;
-    String getStatusJSON() const override final;
-    std::vector<uint8_t> getStatusBinary() const override final;
-    bool getDeviceTypeRecord(DeviceTypeRecordDynamic& devTypeRec) const override final;
-
+    virtual void setup() override final;
+    virtual void loop() override final;
+    virtual void addRestAPIEndpoints(RestAPIEndpointManager& endpointManager) override final;
+    virtual String getStatusJSON() const override final;
+ 
 private:
 
     // Get voltage
@@ -60,7 +55,7 @@ private:
     // Configuration applied
     bool _isConfigured = false;
 
-    // VSENSE to voltage conversion for Heart Earrings
+    // VSENSE to voltage conversion for WordyWatch
     // Note that this is overridden by values in the sysTypes if present
     // Measurements from multimeter
     // 3.584V = 1600

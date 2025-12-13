@@ -8,7 +8,6 @@ idf_component_register(
         RaftCore
         RaftSysMods
         RaftI2C
-        WordySysMod
+        WordyWatch
         DeviceLEDCharlie
-        PowerControl
 )

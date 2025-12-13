@@ -1,6 +1,6 @@
 idf_component_register(
                 SRCS 
-                  "PowerControl.cpp"
+                  "WordyWatch.cpp"
                 INCLUDE_DIRS
                   "."
                 REQUIRES
