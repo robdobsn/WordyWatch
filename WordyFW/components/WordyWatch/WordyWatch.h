@@ -33,6 +33,15 @@ public:
  
 private:
 
+    // Sleep state enum
+    enum WatchState
+    {
+        RUNNING,
+        PREPARING_TO_SLEEP,
+        SLEEPING,
+        WAKING_UP
+    };
+
     // Get voltage
     float getVoltageFromADCReading(uint32_t adcReading) const;
 
@@ -44,6 +53,13 @@ private:
 
     // Handle shutdown
     void shutdown();
+
+    // Sleep/wake methods
+    void prepareForSleep();
+    void enterLightSleep();
+    void handleWakeup();
+    void updateTimeDisplay();
+    bool shouldGoToSleep();
 
     // Apply configuration
     bool applyConfiguration();
@@ -99,6 +115,16 @@ private:
     // Off time threshold for button press ms
     static constexpr uint32_t BUTTON_OFF_TIME_MS_DEFAULT = 2000;
     uint32_t _buttonOffTimeMs = BUTTON_OFF_TIME_MS_DEFAULT;
+
+    // Sleep/wake state management
+    WatchState _currentState = RUNNING;
+    uint32_t _wakeTimeMs = 0;
+    uint32_t _sleepAfterWakeMs = 10000;  // Default 10 seconds
+    bool _autoSleepEnable = true;
+
+    // Wake pin configuration
+    int _wakePinNum = -1;
+    bool _wakePinPullup = false;
 
     // Debug
     uint32_t _lastDebugTimeMs = 0;

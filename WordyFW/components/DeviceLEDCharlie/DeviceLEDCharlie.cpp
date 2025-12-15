@@ -218,6 +218,52 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
     return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "unknownCommand");
 }
 
+void DeviceLEDCharlie::displayTime(int hour, int minute)
+{
+    // Round to minute granularity
+    minute = (minute / LED_MINUTE_GRANULARITY) * LED_MINUTE_GRANULARITY;
+    
+    // Look up LED pattern for time
+    const led_pattern_t* pattern = nullptr;
+    for (const auto& p : led_patterns)
+    {
+        if (p.hour == hour && p.minute == minute)
+        {
+            pattern = &p;
+            break;
+        }
+    }
+    if (!pattern)
+        return;
+        
+    // Apply LED pattern
+    _panel.clear();
+    uint32_t row = 0;
+    uint32_t col = 0;
+    for (uint16_t maskWordIdx = 0; maskWordIdx < LED_MASK_WORDS; maskWordIdx++)
+    {
+        uint32_t mask = pattern->led_mask[maskWordIdx];
+        for (uint16_t maskBitIdx = 0; maskBitIdx < 32; maskBitIdx++)
+        {
+            if (mask & (1UL << maskBitIdx))
+            {
+                _panel.setPixel(col, row, true);
+            }
+            col++;
+            if (col >= LED_GRID_WIDTH)
+            {
+                col = 0;
+                row++;
+                if (row >= LED_GRID_HEIGHT)
+                {
+                    break;
+                }
+            }
+        }
+    }
+    _lastMutateMs = millis();
+}
+
 bool DeviceLEDCharlie::applyConfiguration()
 {
     uint16_t width = static_cast<uint16_t>(deviceConfig.getInt("width", 0));

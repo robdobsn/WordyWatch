@@ -11,6 +11,14 @@
 #include "ConfigPinMap.h"
 #include "RaftUtils.h"
 #include "esp_sleep.h"
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#include "SysManager.h"
+#include "DeviceManager.h"
+#include "DeviceLEDCharlie.h"
+#include "APISourceInfo.h"
+#include <time.h>
+#include <sys/time.h>
 
 #define DEBUG_USER_BUTTON_PRESS
 #define DEBUG_POWER_CONTROL
@@ -41,11 +49,39 @@ void WordyWatch::setup()
     {
         LOG_E(MODULE_PREFIX, "setup configuration failed");
     }
+    
+    // Initialize wake time so device will enter sleep after timeout
+    _wakeTimeMs = millis();
+    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %dms", _sleepAfterWakeMs);
 }
 
 /// @brief Main loop for the WordyWatch device (called frequently)
 void WordyWatch::loop()
 {
+    // Handle state machine
+    switch (_currentState)
+    {
+        case RUNNING:
+            // Normal operation - check battery and button
+            break;
+
+        case PREPARING_TO_SLEEP:
+            prepareForSleep();
+            _currentState = SLEEPING;
+            return;
+
+        case SLEEPING:
+            enterLightSleep();
+            _currentState = WAKING_UP;
+            return;
+
+        case WAKING_UP:
+            handleWakeup();
+            _currentState = RUNNING;
+            _wakeTimeMs = millis();
+            return;
+    }
+
     // Update VSENSE average
     if (_vsensePin < 0)
         return;
@@ -152,6 +188,13 @@ void WordyWatch::loop()
 #endif // FEATURE_POWER_CONTROL_LOW_BATTERY_SHUTDOWN
         }
     }
+
+    // Check if should go to sleep
+    if (_autoSleepEnable && shouldGoToSleep())
+    {
+        LOG_I(MODULE_PREFIX, "loop auto-sleep triggered after %dms awake", (int)Raft::timeElapsed(millis(), _wakeTimeMs));
+        _currentState = PREPARING_TO_SLEEP;
+    }
 }
 
 /// @brief Apply configuration
@@ -187,6 +230,26 @@ bool WordyWatch::applyConfiguration()
 
     // Get button off time
     _buttonOffTimeMs = config.getLong("buttonOffTimeMs", 2000);
+
+    // Get sleep configuration
+    _sleepAfterWakeMs = config.getLong("sleepAfterWakeMs", 10000);
+    _autoSleepEnable = config.getBool("autoSleepEnable", true);
+
+    // Get wake pin configuration
+    pinName = config.getString("wakePinNum", "");
+    _wakePinNum = ConfigPinMap::getPinFromName(pinName.c_str());
+    _wakePinPullup = config.getBool("wakePinPullup", false);
+
+    // Configure wake pin if specified
+    if (_wakePinNum >= 0)
+    {
+        pinMode(_wakePinNum, INPUT);
+        if (_wakePinPullup)
+        {
+            gpio_pullup_en((gpio_num_t)_wakePinNum);
+        }
+        LOG_I(MODULE_PREFIX, "setup wake pin %d pullup %s", _wakePinNum, _wakePinPullup ? "enabled" : "disabled");
+    }
 
     // Get ADC calibration
     _vsenseSlope = VSENSE_SLOPE_DEFAULT;
@@ -244,6 +307,125 @@ void WordyWatch::shutdown()
     // Enter light sleep with no wakeup
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     esp_light_sleep_start();
+}
+
+/// @brief Prepare for sleep by stopping peripherals and holding GPIO
+void WordyWatch::prepareForSleep()
+{
+    LOG_I(MODULE_PREFIX, "prepareForSleep stopping LED panel and holding power pin");
+
+    // Get LED device and stop it
+    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
+    if (pDevMan)
+    {
+        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
+        if (pDevice)
+        {
+            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
+            pLEDDevice->getPanel().stop();
+        }
+    }
+
+    // Hold power control pin HIGH during sleep
+    if (_powerCtrlPin >= 0)
+    {
+        gpio_hold_en((gpio_num_t)_powerCtrlPin);
+    }
+}
+
+/// @brief Enter light sleep with wake pin configured
+void WordyWatch::enterLightSleep()
+{
+    // Configure GPIO wakeup if wake pin is specified
+    if (_wakePinNum >= 0)
+    {
+        // Wake on LOW level (button press pulls pin low)
+        // ESP32-C6 uses ext1 wakeup for GPIO 0-7
+        uint64_t pin_mask = 1ULL << _wakePinNum;
+        esp_sleep_enable_ext1_wakeup_io(pin_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+        LOG_I(MODULE_PREFIX, "enterLightSleep wake pin %d (mask 0x%llx) configured for LOW wake", _wakePinNum, pin_mask);
+    }
+    else
+    {
+        LOG_W(MODULE_PREFIX, "enterLightSleep no wake pin configured!");
+    }
+
+    LOG_I(MODULE_PREFIX, "enterLightSleep entering light sleep...");
+    esp_light_sleep_start();
+}
+
+/// @brief Handle wakeup from sleep
+void WordyWatch::handleWakeup()
+{
+    // Get wakeup cause
+    esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+    const char* causeStr = "UNKNOWN";
+    switch (wakeup_cause)
+    {
+        case ESP_SLEEP_WAKEUP_EXT0: causeStr = "EXT0 (GPIO)"; break;
+        case ESP_SLEEP_WAKEUP_EXT1: causeStr = "EXT1 (GPIO)"; break;
+        case ESP_SLEEP_WAKEUP_TIMER: causeStr = "TIMER"; break;
+        case ESP_SLEEP_WAKEUP_TOUCHPAD: causeStr = "TOUCHPAD"; break;
+        case ESP_SLEEP_WAKEUP_ULP: causeStr = "ULP"; break;
+        default: break;
+    }
+    LOG_I(MODULE_PREFIX, "handleWakeup woke from light sleep, cause: %s", causeStr);
+
+    // Release GPIO holds
+    if (_powerCtrlPin >= 0)
+    {
+        gpio_hold_dis((gpio_num_t)_powerCtrlPin);
+    }
+
+    // Get LED device and restart it
+    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
+    if (pDevMan)
+    {
+        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
+        if (pDevice)
+        {
+            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
+            pLEDDevice->getPanel().start();
+            
+            // Display current time
+            updateTimeDisplay();
+        }
+    }
+}
+
+/// @brief Update time display on LED panel
+void WordyWatch::updateTimeDisplay()
+{
+    // Get current time
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    LOG_I(MODULE_PREFIX, "updateTimeDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+
+    // Get LED device and display time
+    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
+    if (pDevMan)
+    {
+        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
+        if (pDevice)
+        {
+            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
+            pLEDDevice->displayTime(timeinfo.tm_hour, timeinfo.tm_min);
+        }
+    }
+}
+
+/// @brief Check if should go to sleep based on timeout
+bool WordyWatch::shouldGoToSleep()
+{
+    // Don't sleep if time not initialized
+    if (_wakeTimeMs == 0)
+        return false;
+
+    // Check if awake time exceeded
+    return Raft::timeElapsed(millis(), _wakeTimeMs) > _sleepAfterWakeMs;
 }
 
 /// @brief Add REST API endpoints

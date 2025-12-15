@@ -36,6 +36,12 @@ public:
     std::vector<uint8_t> getStatusBinary() const override final;
     bool getDeviceTypeRecord(DeviceTypeRecordDynamic& devTypeRec) const override final;
 
+    // Public access to panel for sleep/wake control
+    LEDCharliePanel& getPanel() { return _panel; }
+    
+    // Display time on LED panel
+    void displayTime(int hour, int minute);
+
 private:
     RaftRetCode apiControl(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     bool applyConfiguration();

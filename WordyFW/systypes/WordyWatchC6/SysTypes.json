@@ -199,6 +199,10 @@
     "batteryLowV": 3.55,
     "vsenseButtonLevel": 2300,
     "buttonOffTimeMs": 2000,
+    "wakePinNum": 9,
+    "wakePinPullup": true,
+    "sleepAfterWakeMs": 10000,
+    "autoSleepEnable": true,
     "adcCalib": {
       "v1": 3.5,
       "a1": 1434,

@@ -5,4 +5,6 @@ idf_component_register(
                   "."
                 REQUIRES
                   RaftCore
+                PRIV_REQUIRES
+                  DeviceLEDCharlie
                 )
