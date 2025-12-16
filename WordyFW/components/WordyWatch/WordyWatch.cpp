@@ -20,8 +20,13 @@
 #include <time.h>
 #include <sys/time.h>
 
-#define DEBUG_USER_BUTTON_PRESS
+// Debug control - uncomment to enable specific debugging
+// #define DEBUG_LOOP_STATE_MACHINE
+#define DEBUG_TIME_DISPLAY
+// #define DEBUG_USER_BUTTON_PRESS
 // #define DEBUG_POWER_CONTROL
+// #define DEBUG_BATTERY_CHECK
+// #define DEBUG_SLEEP_WAKEUP
 
 namespace
 {
@@ -85,7 +90,13 @@ void WordyWatch::loop()
             // If not displaying time, go back to sleep immediately
             if (!_displayingTime && !_isFirstBoot && _sleepAfterWakeMs <= 1)
             {
+#ifdef DEBUG_LOOP_STATE_MACHINE
                 LOG_I(MODULE_PREFIX, "loop button not pressed and sleepAfterWakeMs is %dms, going back to sleep", _sleepAfterWakeMs);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Loop: btn not pressed, sleep after %dms\r\n", _sleepAfterWakeMs);
+                }
+#endif
                 _currentState = PREPARING_TO_SLEEP;
             }
             return;
@@ -94,7 +105,13 @@ void WordyWatch::loop()
     // Check if displaying time duration has expired
     if (_displayingTime && Raft::isTimeout(millis(), _displayTimeStartMs, _showTimeForMs))
     {
+#ifdef DEBUG_LOOP_STATE_MACHINE
         LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("Loop: time display expired, sleeping\r\n");
+        }
+#endif
         _displayingTime = false;
         _currentState = PREPARING_TO_SLEEP;
         return;
@@ -123,7 +140,13 @@ void WordyWatch::loop()
     // Check if should go to sleep (if not displaying time)
     if (!_displayingTime && _autoSleepEnable && shouldGoToSleep())
     {
+#ifdef DEBUG_LOOP_STATE_MACHINE
         LOG_I(MODULE_PREFIX, "loop auto-sleep triggered after %dms awake", (int)Raft::timeElapsed(millis(), _wakeTimeMs));
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("Loop: auto-sleep after %dms\r\n", (int)Raft::timeElapsed(millis(), _wakeTimeMs));
+        }
+#endif
         _currentState = PREPARING_TO_SLEEP;
     }
 }
@@ -283,6 +306,10 @@ void WordyWatch::checkButtonPress(uint32_t vsenseVal)
             {
                 LOG_I(MODULE_PREFIX, "checkButtonPress button pressed for %dms (vsense %d buttonLevel %d buttonOffTime %dms)",
                     (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs), vsenseVal, _vsenseButtonLevel, _buttonOffTimeMs);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Button: pressed %dms\r\n", (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs));
+                }
                 _lastWarnUserShutdownTimeMs = millis();
             }
 #endif // DEBUG_USER_BUTTON_PRESS
@@ -304,6 +331,10 @@ void WordyWatch::checkButtonPress(uint32_t vsenseVal)
 #ifdef DEBUG_USER_BUTTON_PRESS
                 LOG_I(MODULE_PREFIX, "checkButtonPress button pressed for %dms and released (button off time %dms)",
                         (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs), _buttonOffTimeMs);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Button: released after %dms\r\n", (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs));
+                }
 #endif // DEBUG_USER_BUTTON_PRESS
                 _buttonPressed = false;
             }
@@ -330,7 +361,7 @@ void WordyWatch::checkBatteryLevel()
         if (voltage < _batteryLowV)
         {
             // Debug
-#ifdef DEBUG_POWER_CONTROL
+#ifdef DEBUG_BATTERY_CHECK
             if (Raft::isTimeout(millis(), _lastWarnBatLowShutdownTimeMs, 1000))
             {
                 LOG_I(MODULE_PREFIX, "Battery low %s voltage %.2fV instADC %d avgADC %d battLowThreshold %.2fV", 
@@ -340,9 +371,13 @@ void WordyWatch::checkBatteryLevel()
                         "!!! SHUTDOWN DISABLED !!!",
 #endif // FEATURE_POWER_CONTROL_LOW_BATTERY_SHUTDOWN
                     voltage, analogRead(_vsensePin), _vsenseAvg.getAverage(), _batteryLowV);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Battery: LOW %.2fV (thresh=%.2fV)\r\n", voltage, _batteryLowV);
+                }
                 _lastWarnBatLowShutdownTimeMs = millis();
             }
-#endif // DEBUG_POWER_CONTROL
+#endif // DEBUG_BATTERY_CHECK
 
             // Shutdown initiated
 #ifdef FEATURE_POWER_CONTROL_LOW_BATTERY_SHUTDOWN
@@ -358,13 +393,18 @@ void WordyWatch::debugLogPowerStatus()
 #ifdef DEBUG_POWER_CONTROL
     if (Raft::isTimeout(millis(), _lastDebugTimeMs, 1000))
     {
+        uint32_t instVsense = analogRead(_vsensePin);
+        uint32_t avgVsense = _vsenseAvg.getAverage();
+        float voltage = getVoltageFromADCReading(avgVsense);
+        
         LOG_I(MODULE_PREFIX, "debugLogPowerStatus vSense %d avgVSense %d Vcalculated %.2fV battLowThreshold %.2fV sampleCount %d buttonLevel %d",
-                    analogRead(_vsensePin), 
-                    _vsenseAvg.getAverage(),
-                    getVoltageFromADCReading(_vsenseAvg.getAverage()),
-                    _batteryLowV,
-                    _sampleCount,
-                    _vsenseButtonLevel);
+                    instVsense, avgVsense, voltage, _batteryLowV, _sampleCount, _vsenseButtonLevel);
+        
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("Power: V=%.2f inst=%d avg=%d samples=%d\r\n", 
+                voltage, instVsense, avgVsense, _sampleCount);
+        }
         _lastDebugTimeMs = millis();
     }
 #endif // DEBUG_POWER_CONTROL
@@ -505,7 +545,13 @@ void WordyWatch::handleWakeup()
                 // Set display time tracking
                 _displayingTime = true;
                 _displayTimeStartMs = millis();
+#ifdef DEBUG_SLEEP_WAKEUP
                 LOG_I(MODULE_PREFIX, "handleWakeup showing time for %dms", _showTimeForMs);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Wakeup: showing time for %dms\r\n", _showTimeForMs);
+                }
+#endif
             }
         }
     }
@@ -526,7 +572,13 @@ void WordyWatch::updateTimeDisplay()
     time(&now);
     localtime_r(&now, &timeinfo);
 
-    // LOG_I(MODULE_PREFIX, "updateTimeDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+#ifdef DEBUG_TIME_DISPLAY
+    LOG_I(MODULE_PREFIX, "updateTimeDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    if (_uartLogger.isInitialized())
+    {
+        _uartLogger.printf("Time: %02d:%02d\r\n", timeinfo.tm_hour, timeinfo.tm_min);
+    }
+#endif
 
     // Get LED device and display time
     DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
