@@ -213,6 +213,16 @@ bool WordyWatch::applyConfiguration()
         digitalWrite(_powerCtrlPin, HIGH);
     }
 
+    // Signal isolation pin
+    pinName = config.getString("sigIsoPin", "");
+    _sigIsoPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    if (_sigIsoPin >= 0)
+    {
+        // Set signal isolation pin (to disable isolation)
+        pinMode(_sigIsoPin, OUTPUT);
+        digitalWrite(_sigIsoPin, HIGH);
+    }
+
     // Setup VSENSE pin
     pinName = config.getString("vsensePin", "");
     _vsensePin = ConfigPinMap::getPinFromName(pinName.c_str());
