@@ -180,12 +180,6 @@ bool LEDCharliePanel::start()
     if (_isRunning)
         return true;
 
-    // Release GPIO holds before starting
-    for (int pin : _pins)
-    {
-        gpio_hold_dis((gpio_num_t)pin);
-    }
-
     if (!configureTimer())
         return false;
 
@@ -207,12 +201,6 @@ void LEDCharliePanel::stop()
     }
     _isRunning = false;
     blankAllPins();
-    
-    // Hold all GPIO pins to prevent floating during sleep
-    for (int pin : _pins)
-    {
-        gpio_hold_en((gpio_num_t)pin);
-    }
 }
 
 bool LEDCharliePanel::setPixel(uint16_t x, uint16_t y, bool on)

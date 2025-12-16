@@ -194,8 +194,7 @@
     ]
   },
   "WordyWatch": {
-    "powerCtrlPin": 8,
-    "sigIsoPin": 17,
+    "powerCtrlPin": 17,
     "vsensePin": 2,
     "batteryLowV": 3.55,
     "vsenseButtonLevel": 2300,

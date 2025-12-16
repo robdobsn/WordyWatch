@@ -57,6 +57,7 @@ private:
     // Sleep/wake methods
     void prepareForSleep();
     void enterLightSleep();
+    void enterDeepSleep();
     void handleWakeup();
     void updateTimeDisplay();
     bool shouldGoToSleep();
@@ -96,9 +97,6 @@ private:
     
     // Power control pin
     int _powerCtrlPin = -1;
-
-    // Signal isolation pin (I2C, BOOT and GPIO15 isolated when low)
-    int _sigIsoPin = -1;
 
     // Time to hold power control pin low for shutdown
     static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;

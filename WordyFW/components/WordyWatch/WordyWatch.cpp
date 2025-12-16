@@ -211,16 +211,10 @@ bool WordyWatch::applyConfiguration()
         // Set power control pin
         pinMode(_powerCtrlPin, OUTPUT);
         digitalWrite(_powerCtrlPin, HIGH);
-    }
 
-    // Signal isolation pin
-    pinName = config.getString("sigIsoPin", "");
-    _sigIsoPin = ConfigPinMap::getPinFromName(pinName.c_str());
-    if (_sigIsoPin >= 0)
-    {
-        // Set signal isolation pin (to disable isolation)
-        pinMode(_sigIsoPin, OUTPUT);
-        digitalWrite(_sigIsoPin, HIGH);
+        // Hold power control pin HIGH during sleep
+        gpio_hold_en((gpio_num_t)_powerCtrlPin);
+
     }
 
     // Setup VSENSE pin
@@ -310,8 +304,14 @@ float WordyWatch::getVoltageFromADCReading(uint32_t adcReading) const
 /// @brief Handle shutdown
 void WordyWatch::shutdown()
 {
+    // Disable hold on power control pin and set LOW
+    if (_powerCtrlPin >= 0)
+    {
+        gpio_hold_dis((gpio_num_t)_powerCtrlPin);
+        digitalWrite(_powerCtrlPin, LOW);
+    }
+
     // Shutdown
-    digitalWrite(_powerCtrlPin, LOW);
     delay(TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS);
 
     // Enter light sleep with no wakeup
@@ -335,12 +335,6 @@ void WordyWatch::prepareForSleep()
             pLEDDevice->getPanel().stop();
         }
     }
-
-    // Hold power control pin HIGH during sleep
-    if (_powerCtrlPin >= 0)
-    {
-        gpio_hold_en((gpio_num_t)_powerCtrlPin);
-    }
 }
 
 /// @brief Enter light sleep with wake pin configured
@@ -362,6 +356,27 @@ void WordyWatch::enterLightSleep()
 
     LOG_I(MODULE_PREFIX, "enterLightSleep entering light sleep...");
     esp_light_sleep_start();
+}
+
+/// @brief Enter deep sleep with wake pin configured and power control held
+void WordyWatch::enterDeepSleep()
+{
+    // Configure GPIO wakeup if wake pin is specified
+    if (_wakePinNum >= 0)
+    {
+        // Wake on LOW level (button press pulls pin low)
+        // ESP32-C6 uses ext1 wakeup for GPIO 0-7
+        uint64_t pin_mask = 1ULL << _wakePinNum;
+        esp_sleep_enable_ext1_wakeup_io(pin_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+        LOG_I(MODULE_PREFIX, "enterDeepSleep wake pin %d (mask 0x%llx) configured for LOW wake", _wakePinNum, pin_mask);
+    }
+    else
+    {
+        LOG_W(MODULE_PREFIX, "enterDeepSleep no wake pin configured!");
+    }
+
+    LOG_I(MODULE_PREFIX, "enterDeepSleep entering deep sleep with power pin %d held HIGH...", _powerCtrlPin);
+    esp_deep_sleep_start();
 }
 
 /// @brief Handle wakeup from sleep

@@ -6,7 +6,6 @@ idf_component_register(
         "."
     REQUIRES
         RaftCore
-        RaftSysMods
         RaftI2C
         WordyWatch
         DeviceLEDCharlie

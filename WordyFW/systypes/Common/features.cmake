@@ -4,8 +4,6 @@ set(IDF_TARGET "esp32c6")
 # Raft components
 set(RAFT_COMPONENTS
     RaftCore@main
-    RaftSysMods@main
-    
     RaftI2C@main
 )
 
