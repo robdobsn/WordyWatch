@@ -59,6 +59,11 @@ private:
     void enterLightSleep();
     void enterDeepSleep();
     void handleWakeup();
+
+    // Monitoring methods
+    void checkButtonPress(uint32_t vsenseVal);
+    void checkBatteryLevel();
+    void debugLogPowerStatus();
     void updateTimeDisplay();
     bool shouldGoToSleep();
 
@@ -120,8 +125,17 @@ private:
     // Sleep/wake state management
     WatchState _currentState = RUNNING;
     uint32_t _wakeTimeMs = 0;
-    uint32_t _sleepAfterWakeMs = 10000;  // Default 10 seconds
+    uint32_t _sleepAfterBootMs = 5000;   // Default 5 seconds after boot
+    uint32_t _sleepAfterWakeMs = 10000;  // Default 10 seconds after wake
+    uint32_t _showTimeForMs = 5000;      // Default 5 seconds to show time when button pressed
     bool _autoSleepEnable = true;
+    bool _isFirstBoot = true;            // Track if this is first boot
+    bool _displayingTime = false;        // Track if currently displaying time
+    uint32_t _displayTimeStartMs = 0;    // When time display started
+
+    // Battery check management
+    uint32_t _lastBatteryCheckMs = 0;
+    static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 10000;  // Check battery every 10s
 
     // Wake pin configuration
     int _wakePinNum = -1;
