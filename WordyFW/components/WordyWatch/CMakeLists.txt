@@ -1,6 +1,7 @@
 idf_component_register(
                 SRCS 
                   "WordyWatch.cpp"
+                  "UARTLogger.cpp"
                 INCLUDE_DIRS
                   "."
                 REQUIRES

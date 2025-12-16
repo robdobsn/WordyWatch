@@ -204,7 +204,9 @@
     "sleepAfterBootMs": 5000,
     "sleepAfterWakeMs": 1,
     "showTimeForMs": 5000,
+    "timerWakeupMs": 300,
     "autoSleepEnable": true,
+    "uartLogPin": 16,
     "adcCalib": {
       "v1": 3.5,
       "a1": 1434,

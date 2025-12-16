@@ -170,6 +170,7 @@ bool WordyWatch::applyConfiguration()
     _sleepAfterBootMs = config.getLong("sleepAfterBootMs", 5000);
     _sleepAfterWakeMs = config.getLong("sleepAfterWakeMs", 10000);
     _showTimeForMs = config.getLong("showTimeForMs", 5000);
+    _timerWakeupMs = config.getLong("timerWakeupMs", 100);
     _autoSleepEnable = config.getBool("autoSleepEnable", true);
 
     // Get wake pin configuration
@@ -205,6 +206,21 @@ bool WordyWatch::applyConfiguration()
         _vsenseIntercept = v1 - _vsenseSlope * a1;
     }
 
+    // Setup UART logger
+    int uartLogPin = config.getLong("uartLogPin", -1);
+    if (uartLogPin >= 0)
+    {
+        if (_uartLogger.begin(uartLogPin, 115200))
+        {
+            _uartLogger.printf("\r\n\r\n=== WordyWatch UART Logger Started ===\r\n");
+            LOG_I(MODULE_PREFIX, "UART logger initialized on pin %d", uartLogPin);
+        }
+        else
+        {
+            LOG_E(MODULE_PREFIX, "Failed to initialize UART logger on pin %d", uartLogPin);
+        }
+    }
+
     // Debug
     if (_vsensePin > 0)
     {
@@ -214,6 +230,14 @@ bool WordyWatch::applyConfiguration()
                     getVoltageFromADCReading(adcReading), 
                     _vsenseSlope, _vsenseIntercept,
                     _batteryLowV, _vsenseButtonLevel, _buttonOffTimeMs);
+        
+        // Log to UART as well
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("Setup: pwr=%d vsense=%d ADC=%d V=%.2f batLow=%.2f\r\n",
+                _powerCtrlPin, _vsensePin, (int)adcReading, 
+                getVoltageFromADCReading(adcReading), _batteryLowV);
+        }
     }
     else
     {
@@ -385,10 +409,10 @@ void WordyWatch::prepareForSleep()
 /// @brief Enter light sleep with timer wakeup
 void WordyWatch::enterLightSleep()
 {
-    // Configure timer wakeup for 100ms
-    const uint64_t wakeup_time_us = 100 * 1000; // 100ms in microseconds
+    // Configure timer wakeup
+    const uint64_t wakeup_time_us = _timerWakeupMs * 1000; // Convert ms to microseconds
     esp_sleep_enable_timer_wakeup(wakeup_time_us);
-    LOG_I(MODULE_PREFIX, "enterLightSleep timer wakeup configured for 100ms");
+    LOG_I(MODULE_PREFIX, "enterLightSleep timer wakeup configured for %dms", _timerWakeupMs);
 
     LOG_I(MODULE_PREFIX, "enterLightSleep entering light sleep...");
     esp_light_sleep_start();
@@ -397,10 +421,10 @@ void WordyWatch::enterLightSleep()
 /// @brief Enter deep sleep with timer wakeup and power control held
 void WordyWatch::enterDeepSleep()
 {
-    // Configure timer wakeup for 100ms
-    const uint64_t wakeup_time_us = 100 * 1000; // 100ms in microseconds
+    // Configure timer wakeup
+    const uint64_t wakeup_time_us = _timerWakeupMs * 1000; // Convert ms to microseconds
     esp_sleep_enable_timer_wakeup(wakeup_time_us);
-    LOG_I(MODULE_PREFIX, "enterDeepSleep timer wakeup configured for 100ms");
+    LOG_I(MODULE_PREFIX, "enterDeepSleep timer wakeup configured for %dms", _timerWakeupMs);
 
     LOG_I(MODULE_PREFIX, "enterDeepSleep entering deep sleep with power pin %d held HIGH...", _powerCtrlPin);
     esp_deep_sleep_start();
@@ -446,7 +470,12 @@ void WordyWatch::handleWakeup()
     {
         // Active LOW
         buttonPressed = (gpio_get_level((gpio_num_t)_wakePinNum) == 0);
-        // LOG_I(MODULE_PREFIX, "handleWakeup BOOT button (GPIO %d) is %s", _wakePinNum, buttonPressed ? "PRESSED" : "not pressed");
+        
+        // Log to UART
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("Wake: btn=%s\r\n", buttonPressed ? "PRESS" : "none");
+        }
     }
 
     // DEBUG - FORCE BUTTON PRESSED
