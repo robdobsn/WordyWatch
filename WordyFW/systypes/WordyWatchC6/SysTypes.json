@@ -197,7 +197,7 @@
     "powerCtrlPin": 17,
     "vsensePin": 2,
     "batteryLowV": 3.55,
-    "vsenseButtonLevel": 2300,
+    "vsenseButtonLevel": 1550,
     "buttonOffTimeMs": 2000,
     "wakePinNum": 9,
     "wakePinPullup": true,
@@ -208,10 +208,10 @@
     "autoSleepEnable": true,
     "uartLogPin": 16,
     "adcCalib": {
-      "v1": 3.5,
-      "a1": 1434,
+      "v1": 3.2,
+      "a1": 1002,
       "v2": 4.2,
-      "a2": 1718
+      "a2": 1346
     }
   }
 }

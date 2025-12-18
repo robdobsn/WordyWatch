@@ -23,10 +23,12 @@
 // Debug control - uncomment to enable specific debugging
 // #define DEBUG_LOOP_STATE_MACHINE
 #define DEBUG_TIME_DISPLAY
-// #define DEBUG_USER_BUTTON_PRESS
+#define DEBUG_USER_BUTTON_PRESS
 // #define DEBUG_POWER_CONTROL
-// #define DEBUG_BATTERY_CHECK
+#define DEBUG_BATTERY_CHECK
 // #define DEBUG_SLEEP_WAKEUP
+// #define DEBUG_BOOT_BUTTON_PRESS
+#define DEBUG_VSENSE_READING
 
 namespace
 {
@@ -107,37 +109,14 @@ void WordyWatch::loop()
     {
 #ifdef DEBUG_LOOP_STATE_MACHINE
         LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
-        if (_uartLogger.isInitialized())
-        {
-            _uartLogger.printf("Loop: time display expired, sleeping\r\n");
-        }
+        _uartLogger.printf("Loop: time display expired, sleeping\r\n");
 #endif
         _displayingTime = false;
         _currentState = PREPARING_TO_SLEEP;
         return;
     }
 
-    // Check battery level every 10 seconds
-    if (Raft::isTimeout(millis(), _lastBatteryCheckMs, BATTERY_CHECK_INTERVAL_MS))
-    {
-        _lastBatteryCheckMs = millis();
-        
-        if (_vsensePin >= 0)
-        {
-            // Get VSENSE value and update average
-            uint32_t vsenseVal = analogRead(_vsensePin);
-            _vsenseAvg.sample(vsenseVal);
-            _sampleCount++;
-            
-            // Check battery level
-            checkBatteryLevel();
-            
-            // Debug logging
-            debugLogPowerStatus();
-        }
-    }
-
-    // Check if should go to sleep (if not displaying time)
+    // Check if we should go to sleep (if not displaying time)
     if (!_displayingTime && _autoSleepEnable && shouldGoToSleep())
     {
 #ifdef DEBUG_LOOP_STATE_MACHINE
@@ -283,7 +262,7 @@ float WordyWatch::getVoltageFromADCReading(uint32_t adcReading) const
 
 /// @brief Check button press via VSENSE pin
 /// @param vsenseVal Current VSENSE reading
-void WordyWatch::checkButtonPress(uint32_t vsenseVal)
+void WordyWatch::checkUserButtonPress(uint32_t vsenseVal)
 {
     // The pushbutton is wired to VSENSE so if it is pressed the VSENSE pin
     // will go above a threshold
@@ -296,29 +275,6 @@ void WordyWatch::checkButtonPress(uint32_t vsenseVal)
         // Pressed
         _buttonPressed = true;
         _buttonPressChangeTimeMs = millis();
-
-        // Check if button press is over the off time threshold
-        if (Raft::timeElapsed(millis(), _buttonPressDownTimeMs) > _buttonOffTimeMs)
-        {
-            // Debug
-#ifdef DEBUG_USER_BUTTON_PRESS
-            if (Raft::isTimeout(millis(), _lastWarnUserShutdownTimeMs, 1000))
-            {
-                LOG_I(MODULE_PREFIX, "checkButtonPress button pressed for %dms (vsense %d buttonLevel %d buttonOffTime %dms)",
-                    (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs), vsenseVal, _vsenseButtonLevel, _buttonOffTimeMs);
-                if (_uartLogger.isInitialized())
-                {
-                    _uartLogger.printf("Button: pressed %dms\r\n", (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs));
-                }
-                _lastWarnUserShutdownTimeMs = millis();
-            }
-#endif // DEBUG_USER_BUTTON_PRESS
-
-            // Shutdown initiated
-#ifdef FEATURE_POWER_CONTROL_USER_SHUTDOWN
-            _shutdownInitiated = true;
-#endif // FEATURE_POWER_CONTROL_USER_SHUTDOWN
-        }
     }
     else
     {
@@ -329,7 +285,7 @@ void WordyWatch::checkButtonPress(uint32_t vsenseVal)
             {
                 // Button released
 #ifdef DEBUG_USER_BUTTON_PRESS
-                LOG_I(MODULE_PREFIX, "checkButtonPress button pressed for %dms and released (button off time %dms)",
+                LOG_I(MODULE_PREFIX, "checkUserButtonPress button pressed for %dms and released (button off time %dms)",
                         (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs), _buttonOffTimeMs);
                 if (_uartLogger.isInitialized())
                 {
@@ -473,26 +429,45 @@ void WordyWatch::enterDeepSleep()
 /// @brief Handle wakeup from sleep
 void WordyWatch::handleWakeup()
 {
-    // // Get wakeup cause
-    // esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
-    // const char* causeStr = "UNKNOWN";
-    // switch (wakeup_cause)
-    // {
-    //     case ESP_SLEEP_WAKEUP_EXT0: causeStr = "EXT0 (GPIO)"; break;
-    //     case ESP_SLEEP_WAKEUP_EXT1: causeStr = "EXT1 (GPIO)"; break;
-    //     case ESP_SLEEP_WAKEUP_TIMER: causeStr = "TIMER"; break;
-    //     case ESP_SLEEP_WAKEUP_TOUCHPAD: causeStr = "TOUCHPAD"; break;
-    //     case ESP_SLEEP_WAKEUP_ULP: causeStr = "ULP"; break;
-    //     default: break;
-    // }
-    // LOG_I(MODULE_PREFIX, "handleWakeup woke from sleep, cause: %s", causeStr);
+    // Check if wakeup button was pressed
+    checkWakeupButtonPress();
 
+    // Check battery level occasionally
+    if (Raft::isTimeout(millis(), _lastBatteryCheckMs, BATTERY_CHECK_INTERVAL_MS))
+    {
+        _lastBatteryCheckMs = millis();
+        
+        if (_vsensePin >= 0)
+        {
+            // Get VSENSE value and update average
+            uint32_t vsenseVal = analogRead(_vsensePin);
+            _vsenseAvg.sample(vsenseVal);
+            _sampleCount++;
+
+#ifdef DEBUG_VSENSE_READING
+      
+            LOG_I(MODULE_PREFIX, "handleWakeup vsenseVal %d avgVSense %d calculatedV %.2fV",
+                        vsenseVal, _vsenseAvg.getAverage(), getVoltageFromADCReading(_vsenseAvg.getAverage()));
+            _uartLogger.printf("Wakeup: vsense=%d avg=%d V=%.2f\r\n",
+                        vsenseVal, _vsenseAvg.getAverage(), getVoltageFromADCReading(_vsenseAvg.getAverage()));
+#endif
+
+            // Check battery level
+            checkBatteryLevel();
+            
+            // Debug logging
+            debugLogPowerStatus();
+        }
+    }
+}
+
+void WordyWatch::checkWakeupButtonPress()
+{
+    // Disable hold on power control pin to allow changes
     if (_powerCtrlPin >= 0)
     {
-        // DEBUG - REMOVE THIS
         gpio_hold_dis((gpio_num_t)_powerCtrlPin);
         digitalWrite(_powerCtrlPin, LOW);
-        // END DEBUG - REMOVE THIS
     }
 
     // Restore pull-up on wake pin after waking from sleep
@@ -504,21 +479,23 @@ void WordyWatch::handleWakeup()
         delayMicroseconds(100);
     }
 
-    // Check if BOOT button (GPIO 9) is pressed by reading GPIO directly
-    bool buttonPressed = false;
+    // Check if wake button is pressed by reading GPIO directly
+    bool wakeButtonPressed = false;
     if (_wakePinNum >= 0)
     {
         // Active LOW
-        buttonPressed = (gpio_get_level((gpio_num_t)_wakePinNum) == 0);
-        
+        wakeButtonPressed = (gpio_get_level((gpio_num_t)_wakePinNum) == 0);
+
+#ifdef DEBUG_BOOT_BUTTON_PRESS
         // Log to UART
         if (_uartLogger.isInitialized())
         {
-            _uartLogger.printf("Wake: btn=%s\r\n", buttonPressed ? "PRESS" : "none");
+            _uartLogger.printf("Wake: btn=%s\r\n", wakeButtonPressed ? "PRESS" : "none");
         }
+#endif
     }
 
-    // DEBUG - FORCE BUTTON PRESSED
+    // Re-enable hold on power control pin
     if (_powerCtrlPin >= 0)
     {
         digitalWrite(_powerCtrlPin, HIGH);
@@ -527,7 +504,7 @@ void WordyWatch::handleWakeup()
 
 
     // If button is pressed, show time and stay awake
-    if (buttonPressed)
+    if (wakeButtonPressed)
     {
         // Get LED device and restart it
         DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");

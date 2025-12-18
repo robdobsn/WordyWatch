@@ -62,11 +62,12 @@ private:
     void handleWakeup();
 
     // Monitoring methods
-    void checkButtonPress(uint32_t vsenseVal);
+    void checkUserButtonPress(uint32_t vsenseVal);
     void checkBatteryLevel();
     void debugLogPowerStatus();
     void updateTimeDisplay();
     bool shouldGoToSleep();
+    void checkWakeupButtonPress();
 
     // Apply configuration
     bool applyConfiguration();
