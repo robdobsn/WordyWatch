@@ -13,6 +13,7 @@
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/i2c_master.h"
 #include "SysManager.h"
 #include "DeviceManager.h"
 #include "DeviceLEDCharlie.h"
@@ -222,7 +223,52 @@ bool WordyWatch::applyConfiguration()
             LOG_E(MODULE_PREFIX, "Failed to initialize UART logger on pin %d", uartLogPin);
         }
     }
+    // Get I2C configuration
+    pinName = config.getString("i2cSdaPin", "");
+    _i2cSdaPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    pinName = config.getString("i2cSclPin", "");
+    _i2cSclPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    _i2cFreqHz = config.getLong("i2cFreqHz", 100000);
+    _accelI2CAddr = config.getLong("accelI2CAddr", 0x6a);
 
+    // Initialize I2C if pins configured
+    if (_i2cSdaPin >= 0 && _i2cSclPin >= 0)
+    {
+        if (initI2C())
+        {
+            LOG_I(MODULE_PREFIX, "I2C initialized on SDA=%d SCL=%d freq=%ldHz", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("I2C: SDA=%d SCL=%d freq=%ldHz\r\n", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
+            }
+            
+            // Initialize accelerometer
+            if (initAccelerometer())
+            {
+                LOG_I(MODULE_PREFIX, "Accelerometer initialized at address 0x%02x", _accelI2CAddr);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Accel: initialized at 0x%02x\r\n", _accelI2CAddr);
+                }
+            }
+            else
+            {
+                LOG_E(MODULE_PREFIX, "Failed to initialize accelerometer");
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("Accel: FAILED to initialize\r\n");
+                }
+            }
+        }
+        else
+        {
+            LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("I2C: FAILED to initialize\r\n");
+            }
+        }
+    }
     // Debug
     if (_vsensePin > 0)
     {
@@ -602,4 +648,109 @@ String WordyWatch::getStatusJSON() const
         ",\"buttonLevel\":" + String(_vsenseButtonLevel) +
         "}";
     return json;
+}
+
+/// @brief Initialize I2C master bus
+/// @return True if successful
+bool WordyWatch::initI2C()
+{
+    // Configure I2C master bus
+    i2c_master_bus_config_t bus_config = {};
+    bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config.i2c_port = I2C_NUM_0;
+    bus_config.scl_io_num = (gpio_num_t)_i2cSclPin;
+    bus_config.sda_io_num = (gpio_num_t)_i2cSdaPin;
+    bus_config.glitch_ignore_cnt = 7;
+    bus_config.flags.enable_internal_pullup = true;
+
+    // Create I2C master bus
+    esp_err_t err = i2c_new_master_bus(&bus_config, &_i2cBusHandle);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "initI2C failed to create master bus: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    // Configure accelerometer device
+    i2c_device_config_t dev_config = {};
+    dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_config.device_address = _accelI2CAddr;
+    dev_config.scl_speed_hz = _i2cFreqHz;
+
+    // Add device to bus
+    err = i2c_master_bus_add_device(_i2cBusHandle, &dev_config, &_accelDevHandle);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "initI2C failed to add device: %s", esp_err_to_name(err));
+        i2c_del_master_bus(_i2cBusHandle);
+        _i2cBusHandle = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
+/// @brief Initialize LSM6DS accelerometer with wrist tilt detection
+/// @return True if successful
+bool WordyWatch::initAccelerometer()
+{
+    if (!_accelDevHandle)
+    {
+        LOG_E(MODULE_PREFIX, "initAccelerometer: I2C device not initialized");
+        return false;
+    }
+
+    // Initialization sequence from DevTypes.json
+    // 0x1018 (26Hz ODR, ±2g), 0x1100 (Gyro OFF), 0x1240 (open-drain INT), 
+    // 0x5880 (enable embedded functions), 0x1980 (enable wrist tilt), 
+    // 0x5F80 (route to INT2)
+    struct RegValue
+    {
+        uint8_t reg;
+        uint8_t value;
+    };
+    
+    const RegValue initSequence[] = {
+        {0x10, 0x18},  // CTRL1_XL: 26Hz ODR, ±2g
+        {0x11, 0x00},  // CTRL2_G: Gyro OFF
+        {0x12, 0x40},  // CTRL3_C: open-drain INT
+        {0x58, 0x80},  // TAP_CFG0: enable embedded functions
+        {0x19, 0x80},  // CTRL10_C: enable wrist tilt
+        {0x5F, 0x80}   // MD2_CFG: route to INT2
+    };
+
+    // Write each register
+    for (size_t i = 0; i < sizeof(initSequence) / sizeof(initSequence[0]); i++)
+    {
+        uint8_t write_buf[2] = {initSequence[i].reg, initSequence[i].value};
+        esp_err_t err = i2c_master_transmit(_accelDevHandle, write_buf, sizeof(write_buf), 1000);
+        if (err != ESP_OK)
+        {
+            LOG_E(MODULE_PREFIX, "initAccelerometer: failed to write reg 0x%02x: %s", 
+                  initSequence[i].reg, esp_err_to_name(err));
+            return false;
+        }
+        
+        // Small delay between writes
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    LOG_I(MODULE_PREFIX, "initAccelerometer: configured LSM6DS for wrist tilt detection");
+    return true;
+}
+
+/// @brief Deinitialize I2C (call before sleep if needed)
+void WordyWatch::deinitI2C()
+{
+    if (_accelDevHandle)
+    {
+        i2c_master_bus_rm_device(_accelDevHandle);
+        _accelDevHandle = nullptr;
+    }
+    
+    if (_i2cBusHandle)
+    {
+        i2c_del_master_bus(_i2cBusHandle);
+        _i2cBusHandle = nullptr;
+    }
 }

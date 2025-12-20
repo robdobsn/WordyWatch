@@ -12,6 +12,7 @@
 #include "SimpleMovingAverage.h"
 #include "RaftSysMod.h"
 #include "UARTLogger.h"
+#include "driver/i2c_master.h"
 
 class RaftJsonIF;
 
@@ -151,4 +152,19 @@ private:
 
     // UART logger for debugging
     UARTLogger _uartLogger;
+
+    // I2C master bus handle
+    i2c_master_bus_handle_t _i2cBusHandle = nullptr;
+    i2c_master_dev_handle_t _accelDevHandle = nullptr;
+    
+    // I2C configuration
+    int _i2cSdaPin = -1;
+    int _i2cSclPin = -1;
+    uint32_t _i2cFreqHz = 100000;  // 100kHz default
+    uint8_t _accelI2CAddr = 0x6a;   // LSM6DS default address
+    
+    // I2C initialization method
+    bool initI2C();
+    bool initAccelerometer();
+    void deinitI2C();
 };

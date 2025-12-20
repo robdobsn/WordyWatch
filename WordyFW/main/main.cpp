@@ -5,7 +5,6 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "RaftCoreApp.h"
-#include "BusI2C.h"
 #include "DeviceFactory.h"
 #include "DeviceLEDCharlie.h"
 #include "WordyWatch.h"
@@ -16,9 +15,6 @@ RaftCoreApp raftCoreApp;
 // Entry point
 extern "C" void app_main(void)
 {
-    // Register BusI2C
-    raftBusSystem.registerBus("I2C", BusI2C::createFn);
-
     // Register charlie LED device
     deviceFactory.registerDevice("LEDCharlie", DeviceLEDCharlie::create);
 

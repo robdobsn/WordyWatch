@@ -153,18 +153,6 @@
     "maxFileSize": 1000000
   },
   "DevMan": {
-    "Buses": {
-      "buslist": [
-        {
-          "name": "I2CA",
-          "type": "I2C",
-          "sdaPin": 6,
-          "sclPin": 5,
-          "i2cFreq": 10000,
-          "loopYieldMs": 20
-        }
-      ]
-    },
     "Devices": [
       {
         "enable": 1,
@@ -212,6 +200,10 @@
       "a1": 1002,
       "v2": 4.2,
       "a2": 1346
-    }
+    },
+    "i2cSdaPin": 6,
+    "i2cSclPin": 5,
+    "i2cFreqHz": 10000,
+    "accelI2CAddr": "0x6a"
   }
 }
