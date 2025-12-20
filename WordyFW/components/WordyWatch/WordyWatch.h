@@ -156,15 +156,19 @@ private:
     // I2C master bus handle
     i2c_master_bus_handle_t _i2cBusHandle = nullptr;
     i2c_master_dev_handle_t _accelDevHandle = nullptr;
+    i2c_master_dev_handle_t _rtcDevHandle = nullptr;
     
     // I2C configuration
     int _i2cSdaPin = -1;
     int _i2cSclPin = -1;
     uint32_t _i2cFreqHz = 100000;  // 100kHz default
     uint8_t _accelI2CAddr = 0x6a;   // LSM6DS default address
+    uint8_t _rtcI2CAddr = 0x68;     // RV-4162-C7 default address
     
     // I2C initialization method
     bool initI2C();
     bool initAccelerometer();
+    bool initRTC();
+    bool readRTCTime(struct tm* timeinfo);
     void deinitI2C();
 };

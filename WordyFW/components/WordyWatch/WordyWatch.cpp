@@ -230,6 +230,7 @@ bool WordyWatch::applyConfiguration()
     _i2cSclPin = ConfigPinMap::getPinFromName(pinName.c_str());
     _i2cFreqHz = config.getLong("i2cFreqHz", 100000);
     _accelI2CAddr = config.getLong("accelI2CAddr", 0x6a);
+    _rtcI2CAddr = config.getLong("rtcI2CAddr", 0x68);
 
     // Initialize I2C if pins configured
     if (_i2cSdaPin >= 0 && _i2cSclPin >= 0)
@@ -257,6 +258,43 @@ bool WordyWatch::applyConfiguration()
                 if (_uartLogger.isInitialized())
                 {
                     _uartLogger.printf("Accel: FAILED to initialize\r\n");
+                }
+            }
+            
+            // Initialize RTC
+            if (initRTC())
+            {
+                LOG_I(MODULE_PREFIX, "RTC initialized at address 0x%02x", _rtcI2CAddr);
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("RTC: initialized at 0x%02x\r\n", _rtcI2CAddr);
+                }
+                
+                // Read initial time from RTC and set system time
+                struct tm timeinfo;
+                if (readRTCTime(&timeinfo))
+                {
+                    struct timeval tv;
+                    tv.tv_sec = mktime(&timeinfo);
+                    tv.tv_usec = 0;
+                    settimeofday(&tv, NULL);
+                    LOG_I(MODULE_PREFIX, "System time set from RTC: %04d-%02d-%02d %02d:%02d:%02d", 
+                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+                    if (_uartLogger.isInitialized())
+                    {
+                        _uartLogger.printf("RTC: Time %04d-%02d-%02d %02d:%02d:%02d\r\n",
+                                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+                    }
+                }
+            }
+            else
+            {
+                LOG_E(MODULE_PREFIX, "Failed to initialize RTC");
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("RTC: FAILED to initialize\r\n");
                 }
             }
         }
@@ -589,11 +627,23 @@ void WordyWatch::checkWakeupButtonPress()
 /// @brief Update time display on LED panel
 void WordyWatch::updateTimeDisplay()
 {
-    // Get current time
-    time_t now;
+    // Get current time from RTC
     struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
+    if (readRTCTime(&timeinfo))
+    {
+        // Update system time from RTC
+        struct timeval tv;
+        tv.tv_sec = mktime(&timeinfo);
+        tv.tv_usec = 0;
+        settimeofday(&tv, NULL);
+    }
+    else
+    {
+        // Fall back to system time if RTC read fails
+        time_t now;
+        time(&now);
+        localtime_r(&now, &timeinfo);
+    }
 
 #ifdef DEBUG_TIME_DISPLAY
     LOG_I(MODULE_PREFIX, "updateTimeDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
@@ -748,9 +798,95 @@ void WordyWatch::deinitI2C()
         _accelDevHandle = nullptr;
     }
     
+    if (_rtcDevHandle)
+    {
+        i2c_master_bus_rm_device(_rtcDevHandle);
+        _rtcDevHandle = nullptr;
+    }
+    
     if (_i2cBusHandle)
     {
         i2c_del_master_bus(_i2cBusHandle);
         _i2cBusHandle = nullptr;
     }
+}
+
+/// @brief Initialize RV-4162-C7 RTC device
+/// @return True if successful
+bool WordyWatch::initRTC()
+{
+    if (!_i2cBusHandle)
+    {
+        LOG_E(MODULE_PREFIX, "initRTC: I2C bus not initialized");
+        return false;
+    }
+
+    // Configure RTC device
+    i2c_device_config_t dev_config = {};
+    dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_config.device_address = _rtcI2CAddr;
+    dev_config.scl_speed_hz = _i2cFreqHz;
+
+    // Add device to bus
+    esp_err_t err = i2c_master_bus_add_device(_i2cBusHandle, &dev_config, &_rtcDevHandle);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "initRTC: failed to add device: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    return true;
+}
+
+/// @brief Read time from RV-4162-C7 RTC
+/// @param timeinfo Pointer to tm structure to fill with time data
+/// @return True if successful
+bool WordyWatch::readRTCTime(struct tm* timeinfo)
+{
+    if (!_rtcDevHandle || !timeinfo)
+    {
+        return false;
+    }
+
+    // RV-4162-C7 time registers start at 0x01
+    // Read 7 bytes: Seconds, Minutes, Hours, Weekday, Date, Month, Year
+    uint8_t reg_addr = 0x01;
+    uint8_t time_data[7];
+    
+    esp_err_t err = i2c_master_transmit_receive(_rtcDevHandle, &reg_addr, 1, time_data, sizeof(time_data), 1000);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "readRTCTime: I2C read failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    // Log raw RTC data for debugging
+    LOG_I(MODULE_PREFIX, "readRTCTime: Raw RTC data: %02X %02X %02X %02X %02X %02X %02X",
+          time_data[0], time_data[1], time_data[2], time_data[3], 
+          time_data[4], time_data[5], time_data[6]);
+    if (_uartLogger.isInitialized())
+    {
+        _uartLogger.printf("RTC raw: %02X %02X %02X %02X %02X %02X %02X\r\n",
+                          time_data[0], time_data[1], time_data[2], time_data[3], 
+                          time_data[4], time_data[5], time_data[6]);
+    }
+
+    // Convert BCD to decimal
+    auto bcd_to_dec = [](uint8_t bcd) -> uint8_t {
+        return ((bcd >> 4) * 10) + (bcd & 0x0F);
+    };
+
+    // Parse time data (all in BCD format)
+    timeinfo->tm_sec = bcd_to_dec(time_data[0] & 0x7F);      // 0x01: Seconds (0-59)
+    timeinfo->tm_min = bcd_to_dec(time_data[1] & 0x7F);      // 0x02: Minutes (0-59)
+    timeinfo->tm_hour = bcd_to_dec(time_data[2] & 0x3F);     // 0x03: Hours (0-23)
+    timeinfo->tm_wday = bcd_to_dec(time_data[3] & 0x07);     // 0x04: Weekday (0-6)
+    timeinfo->tm_mday = bcd_to_dec(time_data[4] & 0x3F);     // 0x05: Date (1-31)
+    timeinfo->tm_mon = bcd_to_dec(time_data[5] & 0x1F) - 1;  // 0x06: Month (1-12) -> (0-11)
+    timeinfo->tm_year = bcd_to_dec(time_data[6]) + 100;      // 0x07: Year (00-99) -> years since 1900
+
+    // Set DST flag to -1 (unknown)
+    timeinfo->tm_isdst = -1;
+
+    return true;
 }
