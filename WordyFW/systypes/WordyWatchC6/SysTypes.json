@@ -198,14 +198,18 @@
     "adcCalib": {
       "v1": 3.2,
       "a1": 1002,
-      "v2": 4.2,
-      "a2": 1346
+      "v2": 4.16,
+      "a2": 1320
     },
     "i2cSdaPin": 6,
     "i2cSclPin": 5,
     "i2cFreqHz": 10000,
     "accelI2CAddr": "0x6a",
     "rtcI2CAddr": "0x68",
-    "minuteResolution": 5
+    "minuteResolution": 5,
+    "longPressMs": 2000,
+    "timeSetFlashOnMs": 500,
+    "timeSetFlashOffMs": 500,
+    "timeSetTimeoutMs": 30000
   }
 }

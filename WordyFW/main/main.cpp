@@ -8,6 +8,7 @@
 #include "DeviceFactory.h"
 #include "DeviceLEDCharlie.h"
 #include "WordyWatch.h"
+#include "SerialConsole.h"
 
 // Create the app
 RaftCoreApp raftCoreApp;
@@ -18,8 +19,11 @@ extern "C" void app_main(void)
     // Register charlie LED device
     deviceFactory.registerDevice("LEDCharlie", DeviceLEDCharlie::create);
 
+    // Serial Console
+    raftCoreApp.registerSysMod("SerialConsole", SerialConsole::create);
+    
     // WordyWatch
-     raftCoreApp.registerSysMod("WordyWatch", WordyWatch::create, true);
+    raftCoreApp.registerSysMod("WordyWatch", WordyWatch::create, true);
 
     // Loop forever
     while (1)

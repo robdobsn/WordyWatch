@@ -8,6 +8,7 @@
 
 #include "WordyWatch.h"
 #include "RaftJsonIF.h"
+#include "RaftJson.h"
 #include "ConfigPinMap.h"
 #include "RaftUtils.h"
 #include "esp_sleep.h"
@@ -18,6 +19,7 @@
 #include "DeviceManager.h"
 #include "DeviceLEDCharlie.h"
 #include "APISourceInfo.h"
+#include "RestAPIEndpointManager.h"
 #include <time.h>
 #include <sys/time.h>
 
@@ -102,7 +104,82 @@ void WordyWatch::loop()
 #endif
                 _currentState = PREPARING_TO_SLEEP;
             }
+            
+            // Reset wake button state to avoid immediately detecting as pressed
+            // (the button that woke us up might still be pressed)
+            if (_displayingTime && _wakePinNum >= 0)
+            {
+                _wakePinPressed = false;
+                _wakePinPressStartMs = 0;
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("WakeBtn: state reset after wakeup\r\n");
+                }
+            }
             return;
+            
+        case SETTING_TIME_HOURS:
+        case SETTING_TIME_MINUTES:
+            handleTimeSettingMode();
+            return;
+    }
+
+    // Check for long press on wake button to enter time setting mode
+    if (_displayingTime && _wakePinNum >= 0)
+    {
+        int wakePinLevel = digitalRead(_wakePinNum);
+        bool wakePressed = (wakePinLevel == LOW);
+        
+        // Only start tracking a press if button was previously released
+        if (wakePressed && !_wakePinPressed)
+        {
+            _wakePinPressed = true;
+            _wakePinPressStartMs = millis();
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("WakeBtn: pressed (level=%d), tracking for long press\r\n", wakePinLevel);
+            }
+        }
+        else if (wakePressed && _wakePinPressed && _wakePinPressStartMs > 0)
+        {
+            // Check if long press threshold reached (only check once)
+            uint32_t pressDuration = millis() - _wakePinPressStartMs;
+            if (Raft::isTimeout(millis(), _wakePinPressStartMs, _longPressMs))
+            {
+                LOG_I(MODULE_PREFIX, "Long press detected, entering time set mode");
+                if (_uartLogger.isInitialized())
+                {
+                    _uartLogger.printf("WakeBtn: LONG PRESS detected (%dms, level=%d), entering time set mode\r\n", pressDuration, wakePinLevel);
+                }
+                _wakePinPressStartMs = 0;  // Mark as handled - don't check again until released and re-pressed
+                enterTimeSettingMode();
+                return;
+            }
+        }
+        else if (!wakePressed && _wakePinPressed)
+        {
+            // Button released - reset state
+            uint32_t pressDuration = millis() - _wakePinPressStartMs;
+            _wakePinPressed = false;
+            _wakePinPressStartMs = 0;
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("WakeBtn: released after %dms (level=%d, threshold=%d)\r\n", pressDuration, wakePinLevel, _longPressMs);
+            }
+        }
+    }
+    else
+    {
+        // Not displaying time - ensure wake button state is cleared
+        if (_wakePinPressed)
+        {
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("WakeBtn: state cleared (not displaying time)\r\n");
+            }
+        }
+        _wakePinPressed = false;
+        _wakePinPressStartMs = 0;
     }
 
     // Check if displaying time duration has expired
@@ -191,6 +268,13 @@ bool WordyWatch::applyConfiguration()
         }
         LOG_I(MODULE_PREFIX, "setup wake pin %d pullup %s", _wakePinNum, _wakePinPullup ? "enabled" : "disabled");
     }
+    
+    // Get time setting configuration
+    _longPressMs = config.getLong("longPressMs", 2000);
+    _timeSetFlashOnMs = config.getLong("timeSetFlashOnMs", 500);
+    _timeSetFlashOffMs = config.getLong("timeSetFlashOffMs", 500);
+    _timeSetTimeoutMs = config.getLong("timeSetTimeoutMs", 30000);
+    _minuteResolution = config.getLong("minuteResolution", 5);
 
     // Get ADC calibration
     _vsenseSlope = VSENSE_SLOPE_DEFAULT;
@@ -563,6 +647,9 @@ void WordyWatch::checkWakeupButtonPress()
         delayMicroseconds(100);
     }
 
+    // Clear IMU interrupt (INT2 shares the wake pin)
+    clearAccelInterrupt();
+
     // Check if wake button is pressed by reading GPIO directly
     bool wakeButtonPressed = false;
     if (_wakePinNum >= 0)
@@ -684,6 +771,11 @@ bool WordyWatch::shouldGoToSleep()
 /// @param endpointManager Manager for REST API endpoints
 void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
 {
+    endpointManager.addEndpoint("settime",
+        RestAPIEndpoint::ENDPOINT_CALLBACK,
+        RestAPIEndpoint::ENDPOINT_GET,
+        std::bind(&WordyWatch::apiSetTime, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3),
+        "settime/YYYY-MM-DDTHH:MM:SS - Set RTC time");
 }
 
 /// @brief Get the device status as JSON
@@ -751,9 +843,9 @@ bool WordyWatch::initAccelerometer()
     }
 
     // Initialization sequence from DevTypes.json
-    // 0x1018 (26Hz ODR, ±2g), 0x1100 (Gyro OFF), 0x1240 (open-drain INT), 
+    // 0x1018 (26Hz ODR, ±2g), 0x1100 (Gyro OFF), 0x1200 (push-pull INT for testing), 
     // 0x5880 (enable embedded functions), 0x1980 (enable wrist tilt), 
-    // 0x5F80 (route to INT2)
+    // 0x5F00 (INT2 disabled for testing)
     struct RegValue
     {
         uint8_t reg;
@@ -763,10 +855,10 @@ bool WordyWatch::initAccelerometer()
     const RegValue initSequence[] = {
         {0x10, 0x18},  // CTRL1_XL: 26Hz ODR, ±2g
         {0x11, 0x00},  // CTRL2_G: Gyro OFF
-        {0x12, 0x40},  // CTRL3_C: open-drain INT
+        {0x12, 0x60},  // CTRL3_C: open-drain INT (bit 6=1), active low (bit 5=1)
         {0x58, 0x80},  // TAP_CFG0: enable embedded functions
         {0x19, 0x80},  // CTRL10_C: enable wrist tilt
-        {0x5F, 0x80}   // MD2_CFG: route to INT2
+        {0x5F, 0x00}   // MD2_CFG: INT2 disabled for testing
     };
 
     // Write each register
@@ -786,7 +878,47 @@ bool WordyWatch::initAccelerometer()
     }
 
     LOG_I(MODULE_PREFIX, "initAccelerometer: configured LSM6DS for wrist tilt detection");
+    
+    // Clear any pending interrupts
+    clearAccelInterrupt();
+    
     return true;
+}
+
+/// @brief Clear accelerometer interrupt by reading status registers
+void WordyWatch::clearAccelInterrupt()
+{
+    if (!_accelDevHandle)
+    {
+        return;
+    }
+
+    // Read status registers to clear interrupts
+    // For LSM6DS with wrist tilt, we need to read:
+    // - 0x1A (ALL_INT_SRC) - All interrupt source register
+    // - 0x1D (WAKE_UP_SRC) - Wake-up interrupt source
+    // - 0x1C (TAP_SRC) - Tap source (may include tilt status)
+    const uint8_t statusRegs[] = {0x1A, 0x1D, 0x1C};
+    
+    for (size_t i = 0; i < sizeof(statusRegs); i++)
+    {
+        uint8_t reg = statusRegs[i];
+        uint8_t value = 0;
+        
+        esp_err_t err = i2c_master_transmit_receive(_accelDevHandle, &reg, 1, &value, 1, 1000);
+        if (err == ESP_OK)
+        {
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("IMU: Cleared interrupt reg 0x%02X = 0x%02X\r\n", reg, value);
+            }
+        }
+        else
+        {
+            LOG_W(MODULE_PREFIX, "clearAccelInterrupt: failed to read reg 0x%02x: %s", 
+                  reg, esp_err_to_name(err));
+        }
+    }
 }
 
 /// @brief Deinitialize I2C (call before sleep if needed)
@@ -833,6 +965,19 @@ bool WordyWatch::initRTC()
     {
         LOG_E(MODULE_PREFIX, "initRTC: failed to add device: %s", esp_err_to_name(err));
         return false;
+    }
+
+    // Enable 32.768 kHz output on CLKOUT pin (register 0x0F, FD bits = 000)
+    uint8_t clkout_config[2] = {0x0F, 0x00};  // Extension Register, FD[2:0] = 000 for 32.768 kHz
+    err = i2c_master_transmit(_rtcDevHandle, clkout_config, sizeof(clkout_config), 1000);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "initRTC: failed to configure CLKOUT: %s", esp_err_to_name(err));
+        // Don't fail initialization, just log the error
+    }
+    else
+    {
+        LOG_I(MODULE_PREFIX, "initRTC: CLKOUT configured for 32.768 kHz");
     }
 
     return true;
@@ -889,4 +1034,344 @@ bool WordyWatch::readRTCTime(struct tm* timeinfo)
     timeinfo->tm_isdst = -1;
 
     return true;
+}
+
+/// @brief Write time to RV-4162-C7 RTC
+/// @param timeinfo Pointer to tm structure with time data to write
+/// @return True if successful
+bool WordyWatch::writeRTCTime(const struct tm* timeinfo)
+{
+    if (!_rtcDevHandle || !timeinfo)
+    {
+        return false;
+    }
+
+    // Convert decimal to BCD
+    auto dec_to_bcd = [](uint8_t dec) -> uint8_t {
+        return ((dec / 10) << 4) | (dec % 10);
+    };
+
+    // Prepare time data (register address + 7 bytes of time data)
+    uint8_t write_buf[8];
+    write_buf[0] = 0x01;  // Starting register address
+    write_buf[1] = dec_to_bcd(timeinfo->tm_sec);           // Seconds (0-59)
+    write_buf[2] = dec_to_bcd(timeinfo->tm_min);           // Minutes (0-59)
+    write_buf[3] = dec_to_bcd(timeinfo->tm_hour);          // Hours (0-23)
+    write_buf[4] = dec_to_bcd(timeinfo->tm_wday);          // Weekday (0-6)
+    write_buf[5] = dec_to_bcd(timeinfo->tm_mday);          // Date (1-31)
+    write_buf[6] = dec_to_bcd(timeinfo->tm_mon + 1);       // Month (0-11) -> (1-12)
+    write_buf[7] = dec_to_bcd(timeinfo->tm_year - 100);    // Year (years since 1900) -> (00-99)
+
+    esp_err_t err = i2c_master_transmit(_rtcDevHandle, write_buf, sizeof(write_buf), 1000);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "writeRTCTime: I2C write failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    LOG_I(MODULE_PREFIX, "writeRTCTime: Time written to RTC: %04d-%02d-%02d %02d:%02d:%02d",
+          timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+          timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    
+    if (_uartLogger.isInitialized())
+    {
+        _uartLogger.printf("RTC Write: %04d-%02d-%02d %02d:%02d:%02d\r\n",
+                          timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                          timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    }
+
+    return true;
+}
+
+/// @brief REST API endpoint to set time
+RaftRetCode WordyWatch::apiSetTime(const String& reqStr, String& respStr, const APISourceInfo& /*sourceInfo*/)
+{
+    // Parse URL: settime/YYYY-MM-DDTHH:MM:SS
+    std::vector<String> params;
+    std::vector<RaftJson::NameValuePair> nameValues;
+    RestAPIEndpointManager::getParamsAndNameValues(reqStr.c_str(), params, nameValues);
+
+    if (params.size() < 2)
+    {
+        return Raft::setJsonBoolResult(reqStr.c_str(), respStr, false, "missing time parameter");
+    }
+
+    // Parse ISO8601 format: YYYY-MM-DDTHH:MM:SS
+    String timeStr = params[1];
+    struct tm timeinfo = {};
+    
+    int year, month, day, hour, min, sec;
+    if (sscanf(timeStr.c_str(), "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min, &sec) == 6)
+    {
+        timeinfo.tm_year = year - 1900;
+        timeinfo.tm_mon = month - 1;
+        timeinfo.tm_mday = day;
+        timeinfo.tm_hour = hour;
+        timeinfo.tm_min = min;
+        timeinfo.tm_sec = sec;
+        timeinfo.tm_isdst = -1;
+        
+        // Calculate day of week
+        mktime(&timeinfo);
+
+        // Write to RTC
+        if (writeRTCTime(&timeinfo))
+        {
+            // Update system time
+            struct timeval tv;
+            tv.tv_sec = mktime(&timeinfo);
+            tv.tv_usec = 0;
+            settimeofday(&tv, NULL);
+
+            LOG_I(MODULE_PREFIX, "apiSetTime: Time set to %04d-%02d-%02d %02d:%02d:%02d",
+                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+            
+            return Raft::setJsonBoolResult(reqStr.c_str(), respStr, true);
+        }
+        return Raft::setJsonBoolResult(reqStr.c_str(), respStr, false, "RTC write failed");
+    }
+    
+    return Raft::setJsonBoolResult(reqStr.c_str(), respStr, false, "invalid time format");
+}
+
+/// @brief Enter time setting mode
+void WordyWatch::enterTimeSettingMode()
+{
+    _currentState = SETTING_TIME_HOURS;
+    _timeSetStartMs = millis();
+    _timeSetLastFlashMs = 0;  // Force immediate flash update
+    _timeSetFlashState = false;  // Start with blank display
+    
+    // Get current time as starting point
+    struct tm timeinfo;
+    time_t now;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    _timeSetHours = timeinfo.tm_hour;
+    _timeSetMinutes = (timeinfo.tm_min / _minuteResolution) * _minuteResolution;
+    
+    LOG_I(MODULE_PREFIX, "Entering time set mode: %02d:%02d", _timeSetHours, _timeSetMinutes);
+    if (_uartLogger.isInitialized())
+    {
+        _uartLogger.printf("TimeSet: ENTERED mode with time %02d:%02d, State -> SETTING_TIME_HOURS, blanking display\r\n", _timeSetHours, _timeSetMinutes);
+    }
+    
+    // Immediately blank the display
+    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
+    if (pDevMan)
+    {
+        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
+        if (pDevice)
+        {
+            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
+            pLEDDevice->getPanel().clear();
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("TimeSet: Display blanked, will start flashing\r\n");
+            }
+        }
+    }
+}
+
+/// @brief Exit time setting mode
+/// @param save If true, save the time to RTC
+void WordyWatch::exitTimeSettingMode(bool save)
+{
+    if (save)
+    {
+        struct tm timeinfo = {};
+        timeinfo.tm_year = 125;  // 2025
+        timeinfo.tm_mon = 0;     // January
+        timeinfo.tm_mday = 1;
+        timeinfo.tm_hour = _timeSetHours;
+        timeinfo.tm_min = _timeSetMinutes;
+        timeinfo.tm_sec = 0;
+        timeinfo.tm_isdst = -1;
+        
+        // Calculate day of week
+        mktime(&timeinfo);
+        
+        // Write to RTC
+        if (writeRTCTime(&timeinfo))
+        {
+            // Update system time
+            struct timeval tv;
+            tv.tv_sec = mktime(&timeinfo);
+            tv.tv_usec = 0;
+            settimeofday(&tv, NULL);
+            
+            LOG_I(MODULE_PREFIX, "Time saved to RTC: %02d:%02d", _timeSetHours, _timeSetMinutes);
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("TimeSet: SAVED time %02d:%02d to RTC and system\r\n", _timeSetHours, _timeSetMinutes);
+            }
+        }
+        else
+        {
+            if (_uartLogger.isInitialized())
+            {
+                _uartLogger.printf("TimeSet: ERROR - Failed to write time to RTC\r\n");
+            }
+        }
+    }
+    else
+    {
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("TimeSet: CANCELLED without saving\r\n");
+        }
+    }
+    
+    _currentState = RUNNING;
+    _displayingTime = true;
+    _displayTimeStartMs = millis();
+    if (_uartLogger.isInitialized())
+    {
+        _uartLogger.printf("TimeSet: State -> RUNNING\r\n");
+    }
+    updateTimeDisplay();
+}
+
+/// @brief Handle time setting mode state machine
+void WordyWatch::handleTimeSettingMode()
+{
+    // Check for timeout
+    if (Raft::isTimeout(millis(), _timeSetStartMs, _timeSetTimeoutMs))
+    {
+        LOG_I(MODULE_PREFIX, "Time set mode timeout");
+        if (_uartLogger.isInitialized())
+        {
+            _uartLogger.printf("TimeSet: TIMEOUT after %dms, saving current values\r\n", _timeSetTimeoutMs);
+        }
+        exitTimeSettingMode(true);
+        return;
+    }
+    
+    // Handle flash timing
+    uint32_t flashInterval = _timeSetFlashState ? _timeSetFlashOnMs : _timeSetFlashOffMs;
+    if (Raft::isTimeout(millis(), _timeSetLastFlashMs, flashInterval))
+    {
+        _timeSetFlashState = !_timeSetFlashState;
+        _timeSetLastFlashMs = millis();
+        
+        // Update display
+        DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
+        if (pDevMan)
+        {
+            RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
+            if (pDevice)
+            {
+                DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
+                
+                if (_currentState == SETTING_TIME_HOURS)
+                {
+                    // Show only hours (flash on/off)
+                    if (_timeSetFlashState)
+                    {
+                        pLEDDevice->displayTime(_timeSetHours, -1);  // -1 means don't show minutes
+                    }
+                    else
+                    {
+                        pLEDDevice->getPanel().clear();
+                    }
+                }
+                else if (_currentState == SETTING_TIME_MINUTES)
+                {
+                    // Show only minutes (flash on/off)
+                    if (_timeSetFlashState)
+                    {
+                        pLEDDevice->displayTime(-1, _timeSetMinutes);  // -1 means don't show hours
+                    }
+                    else
+                    {
+                        pLEDDevice->getPanel().clear();
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check user button (via vsense) for incrementing
+    uint32_t vsenseVal = _vsensePin > 0 ? analogRead(_vsensePin) : 0;
+    if (vsenseVal > _vsenseButtonLevel)
+    {
+        // Debounce - only trigger once per press
+        if (Raft::isTimeout(millis(), _lastUserButtonPressMs, 300))
+        {
+            _lastUserButtonPressMs = millis();
+            
+            if (_currentState == SETTING_TIME_HOURS)
+            {
+                _timeSetHours = (_timeSetHours + 1) % 24;
+                LOG_I(MODULE_PREFIX, "Hour set to: %02d", _timeSetHours);
+                if (_uartLogger.isInitialized())
+                    _uartLogger.printf("TimeSet: UserBtn pressed, hour -> %02d\r\n", _timeSetHours);
+            }
+            else if (_currentState == SETTING_TIME_MINUTES)
+            {
+                _timeSetMinutes = (_timeSetMinutes + _minuteResolution) % 60;
+                LOG_I(MODULE_PREFIX, "Minute set to: %02d", _timeSetMinutes);
+                if (_uartLogger.isInitialized())
+                    _uartLogger.printf("TimeSet: UserBtn pressed, minute -> %02d\r\n", _timeSetMinutes);
+            }
+            
+            // Force immediate display update
+            _timeSetLastFlashMs = millis();
+            _timeSetFlashState = true;
+        }
+    }
+    
+    // Check wake button for mode transition
+    if (_wakePinNum >= 0)
+    {
+        int wakePinLevel = digitalRead(_wakePinNum);
+        bool wakePressed = (wakePinLevel == LOW);  // Assuming active low
+        
+        if (wakePressed && !_wakePinPressed)
+        {
+            // Button just pressed
+            _wakePinPressed = true;
+            _wakePinPressStartMs = millis();
+            if (_uartLogger.isInitialized())
+                _uartLogger.printf("TimeSet: WakeBtn pressed (level=%d), tracking duration\r\n", wakePinLevel);
+        }
+        else if (!wakePressed && _wakePinPressed)
+        {
+            // Button released
+            _wakePinPressed = false;
+            uint32_t pressDuration = millis() - _wakePinPressStartMs;
+            
+            if (pressDuration > _longPressMs)
+            {
+                // Long press - abort
+                LOG_I(MODULE_PREFIX, "Time set aborted (long press)");
+                if (_uartLogger.isInitialized())
+                    _uartLogger.printf("TimeSet: WakeBtn LONG press %dms (level=%d), aborting\r\n", pressDuration, wakePinLevel);
+                exitTimeSettingMode(false);
+            }
+            else if (pressDuration > 50)  // Debounce
+            {
+                // Short press - advance to next stage or complete
+                if (_currentState == SETTING_TIME_HOURS)
+                {
+                    _currentState = SETTING_TIME_MINUTES;
+                    _timeSetLastFlashMs = millis();
+                    _timeSetFlashState = true;
+                    LOG_I(MODULE_PREFIX, "Now setting minutes");
+                    if (_uartLogger.isInitialized())
+                        _uartLogger.printf("TimeSet: WakeBtn short press %dms (level=%d), State -> SETTING_TIME_MINUTES\r\n", pressDuration, wakePinLevel);
+                }
+                else if (_currentState == SETTING_TIME_MINUTES)
+                {
+                    // Complete
+                    LOG_I(MODULE_PREFIX, "Time setting complete");
+                    if (_uartLogger.isInitialized())
+                        _uartLogger.printf("TimeSet: WakeBtn short press %dms (level=%d), completing\r\n", pressDuration, wakePinLevel);
+                    exitTimeSettingMode(true);
+                }
+            }
+        }
+    }
 }

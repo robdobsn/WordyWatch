@@ -15,6 +15,7 @@
 #include "driver/i2c_master.h"
 
 class RaftJsonIF;
+class APISourceInfo;
 
 class WordyWatch : public RaftSysMod
 {
@@ -41,7 +42,9 @@ private:
         RUNNING,
         PREPARING_TO_SLEEP,
         SLEEPING,
-        WAKING_UP
+        WAKING_UP,
+        SETTING_TIME_HOURS,
+        SETTING_TIME_MINUTES
     };
 
     // Get voltage
@@ -144,6 +147,25 @@ private:
     // Wake pin configuration
     int _wakePinNum = -1;
     bool _wakePinPullup = false;
+    
+    // Wake button press detection
+    uint32_t _wakePinPressStartMs = 0;
+    bool _wakePinPressed = false;
+
+    // Time setting configuration
+    uint32_t _longPressMs = 2000;
+    uint32_t _timeSetFlashOnMs = 500;
+    uint32_t _timeSetFlashOffMs = 500;
+    uint32_t _timeSetTimeoutMs = 30000;
+    uint8_t _minuteResolution = 5;
+    
+    // Time setting state
+    uint32_t _timeSetStartMs = 0;
+    uint32_t _timeSetLastFlashMs = 0;
+    bool _timeSetFlashState = false;
+    int _timeSetHours = 0;
+    int _timeSetMinutes = 0;
+    uint32_t _lastUserButtonPressMs = 0;
 
     // Debug
     uint32_t _lastDebugTimeMs = 0;
@@ -165,10 +187,16 @@ private:
     uint8_t _accelI2CAddr = 0x6a;   // LSM6DS default address
     uint8_t _rtcI2CAddr = 0x68;     // RV-4162-C7 default address
     
-    // I2C initialization method
+    // RTC and time setting methods
     bool initI2C();
     bool initAccelerometer();
+    void clearAccelInterrupt();
     bool initRTC();
     bool readRTCTime(struct tm* timeinfo);
+    bool writeRTCTime(const struct tm* timeinfo);
+    void handleTimeSettingMode();
+    void enterTimeSettingMode();
+    void exitTimeSettingMode(bool save);
+    RaftRetCode apiSetTime(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     void deinitI2C();
 };
