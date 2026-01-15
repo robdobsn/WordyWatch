@@ -228,6 +228,16 @@ bool WordyWatch::applyConfiguration()
 
     }
 
+    // Get the strap control pin
+    pinName = config.getString("strapCtrlPin", "");
+    _strapCtrlPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    if (_strapCtrlPin >= 0)
+    {
+        // Set strap control pin
+        pinMode(_strapCtrlPin, OUTPUT);
+        digitalWrite(_strapCtrlPin, HIGH); // Un-isolate strapping pins 
+    }
+
     // Setup VSENSE pin
     pinName = config.getString("vsensePin", "");
     _vsensePin = ConfigPinMap::getPinFromName(pinName.c_str());
@@ -283,8 +293,10 @@ bool WordyWatch::applyConfiguration()
     int a1 = config.getLong("adcCalib/a1", 0);
     double v2 = config.getDouble("adcCalib/v2", 0);
     int a2 = config.getLong("adcCalib/a2", 0);
-    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d", 
-                _powerCtrlPin, _vsensePin, v1, a1, v2, a2);
+
+    // Debug
+    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d", 
+                _powerCtrlPin, _strapCtrlPin, _vsensePin, v1, a1, v2, a2);
 
     // If a1 and a2 specified then use them
     if ((a1 > 0) && (a2 > 0))
@@ -395,8 +407,8 @@ bool WordyWatch::applyConfiguration()
     if (_vsensePin > 0)
     {
         uint32_t adcReading = _vsensePin > 0 ? analogRead(_vsensePin) : 0;
-        LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV vsenseSlope %.5f vsenseIntercept %.2f batteryLowV %.2f vSenseButtonLevel %d buttonOffTime %dms", 
-                    _powerCtrlPin, _vsensePin, (int)adcReading, 
+        LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV vsenseSlope %.5f vsenseIntercept %.2f batteryLowV %.2f vSenseButtonLevel %d buttonOffTime %dms", 
+                    _powerCtrlPin, _strapCtrlPin, _vsensePin, (int)adcReading, 
                     getVoltageFromADCReading(adcReading), 
                     _vsenseSlope, _vsenseIntercept,
                     _batteryLowV, _vsenseButtonLevel, _buttonOffTimeMs);
@@ -411,8 +423,8 @@ bool WordyWatch::applyConfiguration()
     }
     else
     {
-        LOG_I(MODULE_PREFIX, "setup FAILED powerCtrlPin %d vSensePin INVALID vsenseSlope %.5f vsenseIntercept %.2f", 
-                    _powerCtrlPin, _vsenseSlope, _vsenseIntercept);
+        LOG_I(MODULE_PREFIX, "setup FAILED powerCtrlPin %d strapCtrlPin %d vSensePin INVALID vsenseSlope %.5f vsenseIntercept %.2f", 
+                    _powerCtrlPin, _strapCtrlPin, _vsenseSlope, _vsenseIntercept);
     }
 
     return (_powerCtrlPin >= 0) && (_vsensePin >= 0);

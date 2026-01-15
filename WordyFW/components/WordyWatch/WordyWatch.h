@@ -109,6 +109,9 @@ private:
     // Power control pin
     int _powerCtrlPin = -1;
 
+    // Strap control pin
+    int _strapCtrlPin = -1;
+
     // Time to hold power control pin low for shutdown
     static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;
 
