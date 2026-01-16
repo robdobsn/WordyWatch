@@ -1,0 +1,236 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// RTC - RV-4162-C7 Real-Time Clock
+//
+// Rob Dobson 2025
+//
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include <stdint.h>
+#include <time.h>
+#include "driver/i2c_master.h"
+#include "esp_log.h"
+
+class RTC
+{
+public:
+    /// @brief Constructor
+    /// @param i2cAddr I2C address of the RTC (default 0x68 for RV-4162-C7)
+    explicit RTC(uint8_t i2cAddr = 0x68)
+        : _i2cAddr(i2cAddr)
+        , _devHandle(nullptr)
+    {
+    }
+
+    /// @brief Destructor
+    ~RTC()
+    {
+        deinit();
+    }
+
+    /// @brief Get I2C address
+    /// @return I2C address
+    uint8_t getI2CAddress() const
+    {
+        return _i2cAddr;
+    }
+
+    /// @brief Set I2C address
+    /// @param addr New I2C address
+    void setI2CAddress(uint8_t addr)
+    {
+        _i2cAddr = addr;
+    }
+
+    /// @brief Add RTC device to I2C bus
+    /// @param busHandle I2C bus handle
+    /// @param sclSpeedHz SCL speed in Hz
+    /// @return True if successful
+    bool addToI2CBus(i2c_master_bus_handle_t busHandle, uint32_t sclSpeedHz)
+    {
+        if (!busHandle)
+        {
+            ESP_LOGE("RTC", "addToI2CBus: Invalid bus handle");
+            return false;
+        }
+
+        // Configure RTC device
+        i2c_device_config_t dev_config = {};
+        dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+        dev_config.device_address = _i2cAddr;
+        dev_config.scl_speed_hz = sclSpeedHz;
+
+        // Add device to bus
+        esp_err_t err = i2c_master_bus_add_device(busHandle, &dev_config, &_devHandle);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("RTC", "addToI2CBus: Failed to add device: %s", esp_err_to_name(err));
+            return false;
+        }
+
+        return true;
+    }
+
+    /// @brief Initialize RV-4162-C7 RTC device
+    /// @return True if successful
+    bool init()
+    {
+        if (!_devHandle)
+        {
+            ESP_LOGE("RTC", "init: Device not added to I2C bus");
+            return false;
+        }
+
+        // Enable 32.768 kHz output on CLKOUT pin (register 0x0F, FD bits = 000)
+        uint8_t clkout_config[2] = {0x0F, 0x00};  // Extension Register, FD[2:0] = 000 for 32.768 kHz
+        esp_err_t err = i2c_master_transmit(_devHandle, clkout_config, sizeof(clkout_config), 1000);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("RTC", "init: Failed to configure CLKOUT: %s", esp_err_to_name(err));
+            // Don't fail initialization, just log the error
+        }
+        else
+        {
+            ESP_LOGI("RTC", "init: CLKOUT configured for 32.768 kHz");
+        }
+
+        return true;
+    }
+
+    /// @brief Read time from RV-4162-C7 RTC
+    /// @param timeinfo Pointer to tm structure to fill with time data
+    /// @param logFunc Optional logging function for debug output
+    /// @return True if successful
+    bool readTime(struct tm* timeinfo, void (*logFunc)(const char*) = nullptr)
+    {
+        if (!_devHandle || !timeinfo)
+        {
+            return false;
+        }
+
+        // RV-4162-C7 time registers start at 0x01
+        // Read 7 bytes: Seconds, Minutes, Hours, Weekday, Date, Month, Year
+        uint8_t reg_addr = 0x01;
+        uint8_t time_data[7];
+        
+        esp_err_t err = i2c_master_transmit_receive(_devHandle, &reg_addr, 1, time_data, sizeof(time_data), 1000);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("RTC", "readTime: I2C read failed: %s", esp_err_to_name(err));
+            return false;
+        }
+
+        // Log raw RTC data for debugging
+        ESP_LOGI("RTC", "readTime: Raw RTC data: %02X %02X %02X %02X %02X %02X %02X",
+              time_data[0], time_data[1], time_data[2], time_data[3], 
+              time_data[4], time_data[5], time_data[6]);
+        
+        if (logFunc)
+        {
+            char logBuf[128];
+            snprintf(logBuf, sizeof(logBuf), "RTC raw: %02X %02X %02X %02X %02X %02X %02X\r\n",
+                    time_data[0], time_data[1], time_data[2], time_data[3], 
+                    time_data[4], time_data[5], time_data[6]);
+            logFunc(logBuf);
+        }
+
+        // Convert BCD to decimal
+        auto bcd_to_dec = [](uint8_t bcd) -> uint8_t {
+            return ((bcd >> 4) * 10) + (bcd & 0x0F);
+        };
+
+        // Parse time data (all in BCD format)
+        timeinfo->tm_sec = bcd_to_dec(time_data[0] & 0x7F);      // 0x01: Seconds (0-59)
+        timeinfo->tm_min = bcd_to_dec(time_data[1] & 0x7F);      // 0x02: Minutes (0-59)
+        timeinfo->tm_hour = bcd_to_dec(time_data[2] & 0x3F);     // 0x03: Hours (0-23)
+        timeinfo->tm_wday = bcd_to_dec(time_data[3] & 0x07);     // 0x04: Weekday (0-6)
+        timeinfo->tm_mday = bcd_to_dec(time_data[4] & 0x3F);     // 0x05: Date (1-31)
+        timeinfo->tm_mon = bcd_to_dec(time_data[5] & 0x1F) - 1;  // 0x06: Month (1-12) -> (0-11)
+        timeinfo->tm_year = bcd_to_dec(time_data[6]) + 100;      // 0x07: Year (00-99) -> years since 1900
+
+        // Set DST flag to -1 (unknown)
+        timeinfo->tm_isdst = -1;
+
+        return true;
+    }
+
+    /// @brief Write time to RV-4162-C7 RTC
+    /// @param timeinfo Pointer to tm structure with time data to write
+    /// @param logFunc Optional logging function for debug output
+    /// @return True if successful
+    bool writeTime(const struct tm* timeinfo, void (*logFunc)(const char*) = nullptr)
+    {
+        if (!_devHandle || !timeinfo)
+        {
+            return false;
+        }
+
+        // Convert decimal to BCD
+        auto dec_to_bcd = [](uint8_t dec) -> uint8_t {
+            return ((dec / 10) << 4) | (dec % 10);
+        };
+
+        // Prepare time data (register address + 7 bytes of time data)
+        uint8_t write_buf[8];
+        write_buf[0] = 0x01;  // Starting register address
+        write_buf[1] = dec_to_bcd(timeinfo->tm_sec);           // Seconds (0-59)
+        write_buf[2] = dec_to_bcd(timeinfo->tm_min);           // Minutes (0-59)
+        write_buf[3] = dec_to_bcd(timeinfo->tm_hour);          // Hours (0-23)
+        write_buf[4] = dec_to_bcd(timeinfo->tm_wday);          // Weekday (0-6)
+        write_buf[5] = dec_to_bcd(timeinfo->tm_mday);          // Date (1-31)
+        write_buf[6] = dec_to_bcd(timeinfo->tm_mon + 1);       // Month (0-11) -> (1-12)
+        write_buf[7] = dec_to_bcd(timeinfo->tm_year - 100);    // Year (years since 1900) -> (00-99)
+
+        esp_err_t err = i2c_master_transmit(_devHandle, write_buf, sizeof(write_buf), 1000);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE("RTC", "writeTime: I2C write failed: %s", esp_err_to_name(err));
+            return false;
+        }
+
+        ESP_LOGI("RTC", "writeTime: Time written to RTC: %04d-%02d-%02d %02d:%02d:%02d",
+              timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+              timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        
+        if (logFunc)
+        {
+            char logBuf[128];
+            snprintf(logBuf, sizeof(logBuf), "RTC Write: %04d-%02d-%02d %02d:%02d:%02d\r\n",
+                    timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+            logFunc(logBuf);
+        }
+
+        return true;
+    }
+
+    /// @brief Remove device from I2C bus and cleanup
+    void deinit()
+    {
+        if (_devHandle)
+        {
+            i2c_master_bus_rm_device(_devHandle);
+            _devHandle = nullptr;
+        }
+    }
+
+    /// @brief Check if RTC is initialized
+    /// @return True if initialized
+    bool isInitialized() const
+    {
+        return _devHandle != nullptr;
+    }
+
+    /// @brief Get device handle
+    /// @return Device handle
+    i2c_master_dev_handle_t getDeviceHandle() const
+    {
+        return _devHandle;
+    }
+
+private:
+    uint8_t _i2cAddr;                           // I2C address
+    i2c_master_dev_handle_t _devHandle;         // I2C device handle
+};
