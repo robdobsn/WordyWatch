@@ -9,10 +9,7 @@
 
 #pragma once
 
-#include <stdint.h>
-#include "SimpleMovingAverage.h"
-#include "Logger.h"
-#include "RaftUtils.h"
+#include "RaftCore.h"
 #include "esp_sleep.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
@@ -54,36 +51,34 @@ public:
         _vsenseButtonLevel = vsenseButtonLevel;
         _buttonOffTimeMs = buttonOffTimeMs;
         
-        // Initialize power control pin
-        if (_powerCtrlPin >= 0)
-        {
-            pinMode(_powerCtrlPin, OUTPUT);
-            digitalWrite(_powerCtrlPin, HIGH);
-            gpio_hold_en((gpio_num_t)_powerCtrlPin);
-        }
+        // Enable power hold
+        enablePowerHold();
         
-        // Initialize strap control pin
-        if (_strapCtrlPin >= 0)
-        {
-            pinMode(_strapCtrlPin, OUTPUT);
-            digitalWrite(_strapCtrlPin, HIGH); // Un-isolate strapping pins
-        }
+        // Unisolate strapping pins
+        unisolateStrappingPins();
         
         // Initialize VSENSE pin
         if (_vsensePin >= 0)
         {
             pinMode(_vsensePin, INPUT);
         }
+
+        // Debug
+        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d",
+                    powerCtrlPin, strapCtrlPin, vsensePin, 
+                    vsenseSlope, vsenseIntercept);
         
+        // Mark as configured
         _configured = true;
     }
     
     /// @brief Update power management (call frequently from main loop)
+    /// @return true if shutdown required
     /// Should be called at least every 100ms to maintain responsiveness
-    void update()
+    bool update()
     {
         if (!_configured)
-            return;
+            return false;
             
         // Read VSENSE
         readVSENSE();
@@ -97,6 +92,7 @@ public:
             _lastBatteryCheckMs = millis();
             checkBatteryLevel();
         }
+        return _shutdownRequired;
     }
     
     /// @brief Check if power button is pressed
@@ -113,13 +109,6 @@ public:
         if (!_buttonPressed || _buttonPressDownTimeMs == 0)
             return 0;
         return Raft::timeElapsed(millis(), _buttonPressDownTimeMs);
-    }
-    
-    /// @brief Check if shutdown has been initiated
-    /// @return true if shutdown should occur
-    bool isShutdownInitiated() const
-    {
-        return _shutdownInitiated;
     }
     
     /// @brief Get current battery voltage
@@ -149,14 +138,10 @@ public:
     /// This will hold power control pin low and enter light sleep with no wakeup
     void shutdown()
     {
-        LOG_I("Power", "Executing shutdown sequence");
+        LOG_I(MODULE_PREFIX, "Executing shutdown sequence");
         
         // Disable hold on power control pin and set LOW
-        if (_powerCtrlPin >= 0)
-        {
-            gpio_hold_dis((gpio_num_t)_powerCtrlPin);
-            digitalWrite(_powerCtrlPin, LOW);
-        }
+        disablePowerHold();
         
         // Wait for capacitors to discharge
         delay(TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS);
@@ -173,7 +158,7 @@ public:
         const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
         esp_sleep_enable_timer_wakeup(wakeup_time_us);
         
-        LOG_I("Power", "Entering light sleep for %dms", wakeupMs);
+        LOG_I(MODULE_PREFIX, "Entering light sleep for %dms", wakeupMs);
         esp_light_sleep_start();
     }
     
@@ -185,42 +170,9 @@ public:
         const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
         esp_sleep_enable_timer_wakeup(wakeup_time_us);
         
-        LOG_I("Power", "Entering deep sleep for %dms (power pin %d held HIGH)", wakeupMs, _powerCtrlPin);
+        LOG_I(MODULE_PREFIX, "Entering deep sleep for %dms (power pin %d held HIGH)", wakeupMs, _powerCtrlPin);
         esp_deep_sleep_start();
     }
-    
-    /// @brief Temporarily disable power hold (for checking wake button)
-    /// Call this before checking wake button state, then call enablePowerHold() after
-    void disablePowerHold()
-    {
-        if (_powerCtrlPin >= 0)
-        {
-            gpio_hold_dis((gpio_num_t)_powerCtrlPin);
-            digitalWrite(_powerCtrlPin, LOW);
-        }
-    }
-    
-    /// @brief Re-enable power hold after checking wake button
-    void enablePowerHold()
-    {
-        if (_powerCtrlPin >= 0)
-        {
-            digitalWrite(_powerCtrlPin, HIGH);
-            gpio_hold_en((gpio_num_t)_powerCtrlPin);
-        }
-    }
-    
-    /// @brief Get power control pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getPowerCtrlPin() const { return _powerCtrlPin; }
-    
-    /// @brief Get strap control pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getStrapCtrlPin() const { return _strapCtrlPin; }
-    
-    /// @brief Get VSENSE pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getVSENSEPin() const { return _vsensePin; }
     
     /// @brief Reset button press state
     void resetButtonState()
@@ -248,7 +200,7 @@ private:
     // Battery management
     static constexpr float BATTERY_LOW_V_DEFAULT = 3.55;
     float _batteryLowV = BATTERY_LOW_V_DEFAULT;
-    bool _shutdownInitiated = false;
+    bool _shutdownRequired = false;
     uint32_t _lastBatteryCheckMs = 0;
     static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 10000;  // Check every 10s
     uint32_t _lastWarnBatLowShutdownTimeMs = 0;
@@ -269,6 +221,9 @@ private:
     
     // Power timing
     static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;
+
+    // Debug
+    static constexpr const char* MODULE_PREFIX = "Power";
     
     /// @brief Read VSENSE pin and update average
     void readVSENSE()
@@ -281,7 +236,7 @@ private:
 #ifdef DEBUG_VSENSE_READING
         if (_vsenseSampleCount % 100 == 0)
         {
-            LOG_I("Power", "VSENSE: inst=%d avg=%d V=%.2fV",
+            LOG_I(MODULE_PREFIX, "VSENSE: inst=%d avg=%d V=%.2fV",
                   _vsenseCurVal, _vsenseAvg.getAverage(), getBatteryVoltage());
         }
 #endif
@@ -314,7 +269,7 @@ private:
                 {
                     // Button released after debounce
 #ifdef DEBUG_POWER_MANAGEMENT
-                    LOG_I("Power", "Button released after %dms", 
+                    LOG_I(MODULE_PREFIX, "Button released after %dms", 
                           (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs));
 #endif
                     _buttonPressed = false;
@@ -329,11 +284,11 @@ private:
         }
     }
     
-    /// @brief Check battery level and initiate shutdown if low
+    /// @brief Check battery level and require shutdown if low
     void checkBatteryLevel()
     {
         // Need enough samples before checking
-        if (_shutdownInitiated || _vsenseSampleCount < 100)
+        if (_shutdownRequired || _vsenseSampleCount < 100)
             return;
             
         // Get voltage
@@ -345,7 +300,7 @@ private:
 #ifdef DEBUG_BATTERY_CHECK
             if (Raft::isTimeout(millis(), _lastWarnBatLowShutdownTimeMs, 1000))
             {
-                LOG_I("Power", "Battery low %s voltage %.2fV (threshold %.2fV)",
+                LOG_I(MODULE_PREFIX, "Battery low %s voltage %.2fV (threshold %.2fV)",
 #ifdef FEATURE_POWER_CONTROL_LOW_BATTERY_SHUTDOWN
                       "shutting down",
 #else
@@ -358,7 +313,7 @@ private:
             
             // Initiate shutdown
 #ifdef FEATURE_POWER_CONTROL_LOW_BATTERY_SHUTDOWN
-            _shutdownInitiated = true;
+            _shutdownRequired = true;
 #endif
         }
     }
@@ -370,4 +325,50 @@ private:
     {
         return adcReading * _vsenseSlope + _vsenseIntercept;
     }
+
+    /// @brief Temporarily disable power hold (for checking wake button)
+    /// Call this before checking wake button state, then call enablePowerHold() after
+    void disablePowerHold()
+    {
+        if (_powerCtrlPin >= 0)
+        {
+            gpio_hold_dis((gpio_num_t)_powerCtrlPin);
+            digitalWrite(_powerCtrlPin, LOW);
+        }
+    }
+    
+    /// @brief Re-enable power hold after checking wake button
+    void enablePowerHold()
+    {
+        if (_powerCtrlPin >= 0)
+        {
+            pinMode(_powerCtrlPin, OUTPUT);
+            digitalWrite(_powerCtrlPin, HIGH);
+            gpio_hold_en((gpio_num_t)_powerCtrlPin);
+        }
+    }
+
+    /// @brief Unisolate strapping pins by setting strap control pin HIGH
+    void unisolateStrappingPins()
+    {
+        if (_strapCtrlPin >= 0)
+        {
+            pinMode(_strapCtrlPin, OUTPUT);
+            // Un-isolate strapping pins
+            digitalWrite(_strapCtrlPin, HIGH);
+        }
+    }
+
+    /// @brief Get power control pin number
+    /// @return GPIO pin number or -1 if not configured
+    int getPowerCtrlPin() const { return _powerCtrlPin; }
+    
+    /// @brief Get strap control pin number
+    /// @return GPIO pin number or -1 if not configured
+    int getStrapCtrlPin() const { return _strapCtrlPin; }
+    
+    /// @brief Get VSENSE pin number
+    /// @return GPIO pin number or -1 if not configured
+    int getVSENSEPin() const { return _vsensePin; }
+
 };

@@ -17,7 +17,6 @@
 #include "driver/i2c_master.h"
 #include "SysManager.h"
 #include "DeviceManager.h"
-#include "DeviceLEDCharlie.h"
 #include "APISourceInfo.h"
 #include "RestAPIEndpointManager.h"
 #include <time.h>
@@ -29,15 +28,17 @@
 #define DEBUG_USER_BUTTON_PRESS
 // #define DEBUG_POWER_CONTROL
 #define DEBUG_BATTERY_CHECK
-// #define DEBUG_SLEEP_WAKEUP
+#define DEBUG_SLEEP_WAKEUP
 // #define DEBUG_BOOT_BUTTON_PRESS
 #define DEBUG_VSENSE_READING
+#define DEBUG_DISPLAY_OPERATIONS
 
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "WordyWatch";
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Constructor for WordyWatch
 /// @param pModuleName Module name
 /// @param sysConfig System configuration interface
@@ -46,151 +47,17 @@ WordyWatch::WordyWatch(const char *pModuleName, RaftJsonIF& sysConfig)
 {
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Destructor for WordyWatch
 WordyWatch::~WordyWatch()
 {
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Setup the WordyWatch device
 void WordyWatch::setup()
 {
-    _isConfigured = applyConfiguration();
-    if (!_isConfigured)
-    {
-        LOG_E(MODULE_PREFIX, "setup configuration failed");
-    }
-    
-    // Initialize wake time so device will enter sleep after timeout
-    _wakeTimeMs = millis();
-    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %dms", _sleepAfterWakeMs);
-}
-
-/// @brief Main loop for the WordyWatch device (called frequently)
-void WordyWatch::loop()
-{
-    // Update power management
-    _power.update();
-    
-    // Check for shutdown request
-    if (_power.isShutdownInitiated())
-    {
-        _power.shutdown();
-        return;
-    }
-
-    // Handle state machine
-    switch (_currentState)
-    {
-        case RUNNING:
-            // Normal operation - check battery and button
-            break;
-
-        case PREPARING_TO_SLEEP:
-            prepareForSleep();
-            _currentState = SLEEPING;
-            return;
-
-        case SLEEPING:
-            _power.enterLightSleep(_timerWakeupMs);
-            _currentState = WAKING_UP;
-            return;
-
-        case WAKING_UP:
-            handleWakeup();
-            _wakeTimeMs = millis();
-            // No longer first boot after waking
-            _isFirstBoot = false;
-            _currentState = RUNNING;
-            
-            // If not displaying time, go back to sleep immediately
-            if (!_displayingTime && !_isFirstBoot && _sleepAfterWakeMs <= 1)
-            {
-#ifdef DEBUG_LOOP_STATE_MACHINE
-                LOG_I(MODULE_PREFIX, "loop button not pressed and sleepAfterWakeMs is %dms, going back to sleep", _sleepAfterWakeMs);
-#endif
-                _currentState = PREPARING_TO_SLEEP;
-            }
-            
-            // Reset wake button state to avoid immediately detecting as pressed
-            // (the button that woke us up might still be pressed)
-            if (_displayingTime && _wakePinNum >= 0)
-            {
-                _wakePinPressed = false;
-                _wakePinPressStartMs = 0;
-            }
-            return;
-            
-        case SETTING_TIME_HOURS:
-        case SETTING_TIME_MINUTES:
-            handleTimeSettingMode();
-            return;
-    }
-
-    // Check for long press on wake button to enter time setting mode
-    if (_displayingTime && _wakePinNum >= 0)
-    {
-        int wakePinLevel = digitalRead(_wakePinNum);
-        bool wakePressed = (wakePinLevel == LOW);
-        
-        // Only start tracking a press if button was previously released
-        if (wakePressed && !_wakePinPressed)
-        {
-            _wakePinPressed = true;
-            _wakePinPressStartMs = millis();
-        }
-        else if (wakePressed && _wakePinPressed && _wakePinPressStartMs > 0)
-        {
-            // Check if long press threshold reached (only check once)
-            uint32_t pressDuration = millis() - _wakePinPressStartMs;
-            if (Raft::isTimeout(millis(), _wakePinPressStartMs, _longPressMs))
-            {
-                LOG_I(MODULE_PREFIX, "Long press detected, entering time set mode");
-                _wakePinPressStartMs = 0;  // Mark as handled - don't check again until released and re-pressed
-                enterTimeSettingMode();
-                return;
-            }
-        }
-        else if (!wakePressed && _wakePinPressed)
-        {
-            // Button released - reset state
-            uint32_t pressDuration = millis() - _wakePinPressStartMs;
-            _wakePinPressed = false;
-            _wakePinPressStartMs = 0;
-        }
-    }
-    else
-    {
-        // Not displaying time - ensure wake button state is cleared
-        _wakePinPressed = false;
-        _wakePinPressStartMs = 0;
-    }
-
-    // Check if displaying time duration has expired
-    if (_displayingTime && Raft::isTimeout(millis(), _displayTimeStartMs, _showTimeForMs))
-    {
-#ifdef DEBUG_LOOP_STATE_MACHINE
-        LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
-#endif
-        _displayingTime = false;
-        _currentState = PREPARING_TO_SLEEP;
-        return;
-    }
-
-    // Check if we should go to sleep (if not displaying time)
-    if (!_displayingTime && _autoSleepEnable && shouldGoToSleep())
-    {
-#ifdef DEBUG_LOOP_STATE_MACHINE
-        LOG_I(MODULE_PREFIX, "loop auto-sleep triggered after %dms awake", (int)Raft::timeElapsed(millis(), _wakeTimeMs));
-#endif
-        _currentState = PREPARING_TO_SLEEP;
-    }
-}
-
-/// @brief Apply configuration
-/// @return true if configuration applied successfully
-bool WordyWatch::applyConfiguration()
-{
-    // Get power control pin
+ // Get power control pin
     String pinName = config.getString("powerCtrlPin", "");
     int powerCtrlPin = ConfigPinMap::getPinFromName(pinName.c_str());
 
@@ -219,10 +86,6 @@ bool WordyWatch::applyConfiguration()
     double v2 = config.getDouble("adcCalib/v2", 0);
     int a2 = config.getLong("adcCalib/a2", 0);
 
-    // Debug
-    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d", 
-                powerCtrlPin, strapCtrlPin, vsensePin, v1, a1, v2, a2);
-
     // If a1 and a2 specified then use them
     if ((a1 > 0) && (a2 > 0))
     {
@@ -240,7 +103,6 @@ bool WordyWatch::applyConfiguration()
     _sleepAfterWakeMs = config.getLong("sleepAfterWakeMs", 10000);
     _showTimeForMs = config.getLong("showTimeForMs", 5000);
     _timerWakeupMs = config.getLong("timerWakeupMs", 100);
-    _autoSleepEnable = config.getBool("autoSleepEnable", true);
 
     // Get wake pin configuration
     pinName = config.getString("wakePinNum", "");
@@ -257,12 +119,8 @@ bool WordyWatch::applyConfiguration()
         }
         LOG_I(MODULE_PREFIX, "setup wake pin %d pullup %s", _wakePinNum, _wakePinPullup ? "enabled" : "disabled");
     }
-    
-    // Get time setting configuration
-    _longPressMs = config.getLong("longPressMs", 2000);
-    _timeSetFlashOnMs = config.getLong("timeSetFlashOnMs", 500);
-    _timeSetFlashOffMs = config.getLong("timeSetFlashOffMs", 500);
-    _timeSetTimeoutMs = config.getLong("timeSetTimeoutMs", 30000);
+
+    // Get minute resolution
     _minuteResolution = config.getLong("minuteResolution", 5);
 
     // Get I2C configuration
@@ -275,216 +133,184 @@ bool WordyWatch::applyConfiguration()
     _rtc.setI2CAddress(config.getLong("rtcI2CAddr", 0x68));
 
     // Initialize I2C if pins configured
-    if (_i2cSdaPin >= 0 && _i2cSclPin >= 0)
+    if (initI2C())
     {
-        if (initI2C())
-        {
-            LOG_I(MODULE_PREFIX, "I2C initialized on SDA=%d SCL=%d freq=%ldHz", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
-            
-            // Initialize accelerometer
-            if (_accelerometer.init())
-            {
-                LOG_I(MODULE_PREFIX, "Accelerometer initialized at address 0x%02x", _accelerometer.getI2CAddress());
-            }
-            else
-            {
-                LOG_E(MODULE_PREFIX, "Failed to initialize accelerometer");
-            }
-            
-            // Initialize RTC
-            if (_rtc.init())
-            {
-                LOG_I(MODULE_PREFIX, "RTC initialized at address 0x%02x", _rtc.getI2CAddress());
-                
-                // Read initial time from RTC and set system time
-                struct tm timeinfo;
-                if (_rtc.readTime(&timeinfo, nullptr))
-                {
-                    struct timeval tv;
-                    tv.tv_sec = mktime(&timeinfo);
-                    tv.tv_usec = 0;
-                    settimeofday(&tv, NULL);
-                    LOG_I(MODULE_PREFIX, "System time set from RTC: %04d-%02d-%02d %02d:%02d:%02d", 
-                          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-                }
-            }
-            else
-            {
-                LOG_E(MODULE_PREFIX, "Failed to initialize RTC");
-            }
-        }
-        else
-        {
-            LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
-        }
+        LOG_I(MODULE_PREFIX, "I2C initialized on SDA=%d SCL=%d freq=%ldHz", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
+        
+        // Initialize accelerometer
+        _accelerometer.init();
+        
+        // Initialize RTC
+        _rtc.init();
+        _rtc.setSystemTimeFromRTC();
+    }
+    else
+    {
+        LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
     }
 
     // Debug - do initial power reading
-    if (vsensePin > 0)
-    {
-        _power.update();
-        LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f vSenseButtonLevel %d buttonOffTime %dms", 
-                    powerCtrlPin, strapCtrlPin, vsensePin, 
-                    (int)_power.getVSENSEReading(), 
-                    _power.getBatteryVoltage(), 
-                    batteryLowV, vsenseButtonLevel, buttonOffTimeMs);
-    }
-    else
-    {
-        LOG_I(MODULE_PREFIX, "setup FAILED powerCtrlPin %d strapCtrlPin %d vSensePin INVALID", 
-                    powerCtrlPin, strapCtrlPin);
-    }
-
-    return true;
-}
-
-/// @brief Prepare for sleep by stopping peripherals and holding GPIO
-void WordyWatch::prepareForSleep()
-{
-    LOG_I(MODULE_PREFIX, "prepareForSleep stopping LED panel and holding power pin");
-
-    // Get LED device and stop it
-    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
-    if (pDevMan)
-    {
-        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
-        if (pDevice)
-        {
-            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
-            pLEDDevice->getPanel().stop();
-        }
-    }
-}
-
-/// @brief Handle wakeup from sleep
-void WordyWatch::handleWakeup()
-{
-    // Check if wakeup button was pressed
-    checkWakeupButtonPress();
-
-    // Update power management (includes battery check)
-    _power.update();
-}
-
-void WordyWatch::checkWakeupButtonPress()
-{
-    // Disable hold on power control pin to allow changes
-    _power.disablePowerHold();
-
-    // Restore pull-up on wake pin after waking from sleep
-    if (_wakePinNum >= 0 && _wakePinPullup)
-    {
-        pinMode(_wakePinNum, INPUT);
-        gpio_pullup_en((gpio_num_t)_wakePinNum);
-        // Small delay to let pull-up stabilize
-        delayMicroseconds(100);
-    }
-
-    // Clear IMU interrupt (INT2 shares the wake pin)
-    _accelerometer.clearInterrupt(nullptr);
-
-    // Check if wake button is pressed by reading GPIO directly
-    bool wakeButtonPressed = false;
-    if (_wakePinNum >= 0)
-    {
-        // Active LOW
-        wakeButtonPressed = (gpio_get_level((gpio_num_t)_wakePinNum) == 0);
-
-#ifdef DEBUG_BOOT_BUTTON_PRESS
-        LOG_I(MODULE_PREFIX, "Wake: btn=%s", wakeButtonPressed ? "PRESS" : "none");
-#endif
-    }
-
-    // Re-enable hold on power control pin
-    _power.enablePowerHold();
-
-
-    // If button is pressed, show time and stay awake
-    if (wakeButtonPressed)
-    {
-        // Get LED device and restart it
-        DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
-        if (pDevMan)
-        {
-            RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
-            if (pDevice)
-            {
-                DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
-                pLEDDevice->getPanel().start();
-                
-                // Display current time
-                updateTimeDisplay();
-                
-                // Set display time tracking
-                _displayingTime = true;
-                _displayTimeStartMs = millis();
-#ifdef DEBUG_SLEEP_WAKEUP
-                LOG_I(MODULE_PREFIX, "handleWakeup showing time for %dms", _showTimeForMs);
-#endif
-            }
-        }
-    }
-    else
-    {
-        // Button not pressed, don't display time
-        _displayingTime = false;
-        // LOG_I(MODULE_PREFIX, "handleWakeup button not pressed, will sleep immediately");
-    }
-}
-
-/// @brief Update time display on LED panel
-void WordyWatch::updateTimeDisplay()
-{
-    // Get current time from RTC
-    struct tm timeinfo;
-    if (_rtc.readTime(&timeinfo, nullptr))
-    {
-        // Update system time from RTC
-        struct timeval tv;
-        tv.tv_sec = mktime(&timeinfo);
-        tv.tv_usec = 0;
-        settimeofday(&tv, NULL);
-    }
-    else
-    {
-        // Fall back to system time if RTC read fails
-        time_t now;
-        time(&now);
-        localtime_r(&now, &timeinfo);
-    }
-
-#ifdef DEBUG_TIME_DISPLAY
-    LOG_I(MODULE_PREFIX, "updateTimeDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
-#endif
-
-    // Get LED device and display time
-    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
-    if (pDevMan)
-    {
-        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
-        if (pDevice)
-        {
-            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
-            pLEDDevice->displayTime(timeinfo.tm_hour, timeinfo.tm_min);
-        }
-    }
-}
-
-/// @brief Check if should go to sleep based on timeout
-bool WordyWatch::shouldGoToSleep()
-{
-    // Don't sleep if time not initialized
-    if (_wakeTimeMs == 0)
-        return false;
-
-    // Use appropriate timeout based on boot state
-    uint32_t sleepTimeout = _isFirstBoot ? _sleepAfterBootMs : _sleepAfterWakeMs;
+    bool isShutdownRequired = _power.update();
+    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f isShutdownRequired %d vSenseButtonLevel %d buttonOffTime %dms", 
+                powerCtrlPin, strapCtrlPin, vsensePin, 
+                (int)_power.getVSENSEReading(), 
+                _power.getBatteryVoltage(), 
+                batteryLowV, isShutdownRequired, vsenseButtonLevel, buttonOffTimeMs);
     
-    // Check if awake time exceeded
-    return Raft::timeElapsed(millis(), _wakeTimeMs) > sleepTimeout;
+    // Initialize time last woken
+    _timeLastWokenMs = millis();
+    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %dms", _sleepAfterWakeMs);
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Main loop for the WordyWatch device (called frequently)
+void WordyWatch::loop()
+{
+    // Update power management in all states - returns true if shutdown required
+    bool shutdownRequired = _power.update();
+    if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
+    {
+        LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
+        setState(SHUTDOWN_REQUESTED);
+    }
+
+    // Handle state machine
+    switch (_currentState)
+    {
+        case DISPLAYING_TIME:
+            // Displaying time
+            if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
+            {
+#ifdef DEBUG_LOOP_STATE_MACHINE
+                LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
+#endif
+                setState(PREPARING_TO_SLEEP);
+                return;
+            }
+            break;
+
+        case PREPARING_TO_SLEEP:
+            clearDisplay();
+            setState(SLEEPING);
+            return;
+
+        case SLEEPING:
+            _power.enterLightSleep(_timerWakeupMs);
+            setState(WOKEN_UP);
+            return;
+
+        case WOKEN_UP:
+            // Check wakeup reason
+            checkWakeupReason();
+            _timeLastWokenMs = millis();
+            setState(DISPLAYING_TIME);
+            return;
+        case SHUTDOWN_REQUESTED:
+            // Clear the display
+            clearDisplay();
+            _power.shutdown();
+            setState(SHUTTING_DOWN);
+            return;
+        case SHUTTING_DOWN:
+            // Do nothing - waiting for shutdown            
+            return;
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Check reason for wakeup from sleep
+void WordyWatch::checkWakeupReason()
+{
+    // Get wakeup reason
+    esp_sleep_wakeup_cause_t wakeupReason = esp_sleep_get_wakeup_cause();
+#ifdef DEBUG_SLEEP_WAKEUP
+    LOG_I(MODULE_PREFIX, "checkWakeupReason woke up, reason %d", wakeupReason);
+#endif
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /// @brief Check wakeup button press state
+// void WordyWatch::checkWakeupButtonPress()
+// {
+//     // Disable hold on power control pin to allow changes
+//     _power.disablePowerHold();
+
+//     // Restore pull-up on wake pin after waking from sleep
+//     if (_wakePinNum >= 0 && _wakePinPullup)
+//     {
+//         pinMode(_wakePinNum, INPUT);
+//         gpio_pullup_en((gpio_num_t)_wakePinNum);
+//         // Small delay to let pull-up stabilize
+//         delayMicroseconds(100);
+//     }
+
+//     // Clear IMU interrupt (INT2 shares the wake pin)
+//     _accelerometer.clearInterrupt();
+
+//     // Check if wake button is pressed by reading GPIO directly
+//     bool wakeButtonPressed = false;
+//     if (_wakePinNum >= 0)
+//     {
+//         // Active LOW
+//         wakeButtonPressed = (gpio_get_level((gpio_num_t)_wakePinNum) == 0);
+
+// #ifdef DEBUG_BOOT_BUTTON_PRESS
+//         LOG_I(MODULE_PREFIX, "Wake: btn=%s", wakeButtonPressed ? "PRESS" : "none");
+// #endif
+//     }
+
+//     // Re-enable hold on power control pin
+//     _power.enablePowerHold();
+
+//     // If button is pressed, show time and stay awake
+//     if (wakeButtonPressed)
+//     {
+//         // Get LED device and restart it
+//         RaftDevice* pDevice = getDeviceByName("LEDPanel");
+//         if (pDevice)
+//         {
+//             pDevice->sendCmdJSON("{\"cmd\":\"start\"}");
+            
+//             // Display current time
+//             showTimeOnDisplay();
+            
+// #ifdef DEBUG_SLEEP_WAKEUP
+//             LOG_I(MODULE_PREFIX, "handleWakeup showing time for %dms", _showTimeForMs);
+// #endif
+//         }
+//     }
+// }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Show time display on LED panel
+void WordyWatch::showTimeOnDisplay()
+{
+    // Get time from RTC (falling back to system time if RTC read fails)
+    struct tm timeinfo = {};
+    if (_rtc.getTime(&timeinfo))
+    {
+#ifdef DEBUG_TIME_DISPLAY
+        LOG_I(MODULE_PREFIX, "showTimeOnDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+#endif
+        // Get LED device and display time
+        RaftDevice* pDevice = getDeviceByName("LEDPanel");
+        if (pDevice)
+        {
+            char jsonCmd[100];
+            snprintf(jsonCmd, sizeof(jsonCmd), "{\"cmd\":\"displayTime\",\"hour\":%d,\"minute\":%d}", 
+                    timeinfo.tm_hour, timeinfo.tm_min);
+            pDevice->sendCmdJSON(jsonCmd);
+        }
+    }
+#ifdef DEBUG_TIME_DISPLAY
+    else
+    {
+        LOG_E(MODULE_PREFIX, "showTimeOnDisplay failed to get time");
+    }
+#endif
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Add REST API endpoints
 /// @param endpointManager Manager for REST API endpoints
 void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
@@ -496,6 +322,7 @@ void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
         "settime/YYYY-MM-DDTHH:MM:SS - Set RTC time");
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Get the device status as JSON
 /// @return JSON string
 String WordyWatch::getStatusJSON() const
@@ -508,10 +335,17 @@ String WordyWatch::getStatusJSON() const
     return json;
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Initialize I2C master bus
 /// @return True if successful
 bool WordyWatch::initI2C()
 {
+    if ((_i2cSdaPin < 0) || (_i2cSclPin < 0))
+    {
+        LOG_W(MODULE_PREFIX, "initI2C I2C SDA or SCL pin not configured");
+        return false;
+    }
+
     // Configure I2C master bus
     i2c_master_bus_config_t bus_config = {};
     bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
@@ -550,19 +384,7 @@ bool WordyWatch::initI2C()
     return true;
 }
 
-/// @brief Deinitialize I2C (call before sleep if needed)
-void WordyWatch::deinitI2C()
-{
-    _accelerometer.deinit();
-    _rtc.deinit();
-    
-    if (_i2cBusHandle)
-    {
-        i2c_del_master_bus(_i2cBusHandle);
-        _i2cBusHandle = nullptr;
-    }
-}
-
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief REST API endpoint to set time
 RaftRetCode WordyWatch::apiSetTime(const String& reqStr, String& respStr, const APISourceInfo& /*sourceInfo*/)
 {
@@ -615,204 +437,16 @@ RaftRetCode WordyWatch::apiSetTime(const String& reqStr, String& respStr, const 
     return Raft::setJsonBoolResult(reqStr.c_str(), respStr, false, "invalid time format");
 }
 
-/// @brief Enter time setting mode
-void WordyWatch::enterTimeSettingMode()
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Clear the display
+void WordyWatch::clearDisplay()
 {
-    _currentState = SETTING_TIME_HOURS;
-    _timeSetStartMs = millis();
-    _timeSetLastFlashMs = 0;  // Force immediate flash update
-    _timeSetFlashState = false;  // Start with blank display
-    
-    // Get current time as starting point
-    struct tm timeinfo;
-    time_t now;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    
-    _timeSetHours = timeinfo.tm_hour;
-    _timeSetMinutes = (timeinfo.tm_min / _minuteResolution) * _minuteResolution;
-    
-    LOG_I(MODULE_PREFIX, "Entering time set mode: %02d:%02d", _timeSetHours, _timeSetMinutes);
-    }
-    
-    // Immediately blank the display
-    DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
-    if (pDevMan)
-    {
-        RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
-        if (pDevice)
-        {
-            DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
-            pLEDDevice->getPanel().clear();
-            }
-        }
-    }
-}
+#ifdef DEBUG_DISPLAY_OPERATIONS
+    LOG_I(MODULE_PREFIX, "clearDisplay stopping LED panel");
+#endif
 
-/// @brief Exit time setting mode
-/// @param save If true, save the time to RTC
-void WordyWatch::exitTimeSettingMode(bool save)
-{
-    if (save)
-    {
-        struct tm timeinfo = {};
-        timeinfo.tm_year = 125;  // 2025
-        timeinfo.tm_mon = 0;     // January
-        timeinfo.tm_mday = 1;
-        timeinfo.tm_hour = _timeSetHours;
-        timeinfo.tm_min = _timeSetMinutes;
-        timeinfo.tm_sec = 0;
-        timeinfo.tm_isdst = -1;
-        
-        // Calculate day of week
-        mktime(&timeinfo);
-        
-        // Write to RTC
-        if (_rtc.writeTime(&timeinfo, [this](const char* msg) {
-        }))
-        {
-            // Update system time
-            struct timeval tv;
-            tv.tv_sec = mktime(&timeinfo);
-            tv.tv_usec = 0;
-            settimeofday(&tv, NULL);
-            
-            LOG_I(MODULE_PREFIX, "Time saved to RTC: %02d:%02d", _timeSetHours, _timeSetMinutes);
-            }
-        }
-        else
-        {
-            }
-        }
-    }
-    else
-    {
-        }
-    }
-    
-    _currentState = RUNNING;
-    _displayingTime = true;
-    _displayTimeStartMs = millis();
-    }
-    updateTimeDisplay();
-}
-
-/// @brief Handle time setting mode state machine
-void WordyWatch::handleTimeSettingMode()
-{
-    // Check for timeout
-    if (Raft::isTimeout(millis(), _timeSetStartMs, _timeSetTimeoutMs))
-    {
-        LOG_I(MODULE_PREFIX, "Time set mode timeout");
-        }
-        exitTimeSettingMode(true);
-        return;
-    }
-    
-    // Handle flash timing
-    uint32_t flashInterval = _timeSetFlashState ? _timeSetFlashOnMs : _timeSetFlashOffMs;
-    if (Raft::isTimeout(millis(), _timeSetLastFlashMs, flashInterval))
-    {
-        _timeSetFlashState = !_timeSetFlashState;
-        _timeSetLastFlashMs = millis();
-        
-        // Update display
-        DeviceManager* pDevMan = (DeviceManager*)getSysManager()->getSysMod("DevMan");
-        if (pDevMan)
-        {
-            RaftDevice* pDevice = pDevMan->getDevice("LEDPanel");
-            if (pDevice)
-            {
-                DeviceLEDCharlie* pLEDDevice = (DeviceLEDCharlie*)pDevice;
-                
-                if (_currentState == SETTING_TIME_HOURS)
-                {
-                    // Show only hours (flash on/off)
-                    if (_timeSetFlashState)
-                    {
-                        pLEDDevice->displayTime(_timeSetHours, -1);  // -1 means don't show minutes
-                    }
-                    else
-                    {
-                        pLEDDevice->getPanel().clear();
-                    }
-                }
-                else if (_currentState == SETTING_TIME_MINUTES)
-                {
-                    // Show only minutes (flash on/off)
-                    if (_timeSetFlashState)
-                    {
-                        pLEDDevice->displayTime(-1, _timeSetMinutes);  // -1 means don't show hours
-                    }
-                    else
-                    {
-                        pLEDDevice->getPanel().clear();
-                    }
-                }
-            }
-        }
-    }
-    
-    // Check user button (via vsense) for incrementing
-    if (_power.isPowerButtonPressed())
-    {
-        // Debounce - only trigger once per press
-        if (Raft::isTimeout(millis(), _lastUserButtonPressMs, 300))
-        {
-            _lastUserButtonPressMs = millis();
-            
-            if (_currentState == SETTING_TIME_HOURS)
-            {
-                _timeSetHours = (_timeSetHours + 1) % 24;
-                LOG_I(MODULE_PREFIX, "Hour set to: %02d", _timeSetHours);
-            else if (_currentState == SETTING_TIME_MINUTES)
-            {
-                _timeSetMinutes = (_timeSetMinutes + _minuteResolution) % 60;
-                LOG_I(MODULE_PREFIX, "Minute set to: %02d", _timeSetMinutes);
-            
-            // Force immediate display update
-            _timeSetLastFlashMs = millis();
-            _timeSetFlashState = true;
-        }
-    }
-    
-    // Check wake button for mode transition
-    if (_wakePinNum >= 0)
-    {
-        int wakePinLevel = digitalRead(_wakePinNum);
-        bool wakePressed = (wakePinLevel == LOW);  // Assuming active low
-        
-        if (wakePressed && !_wakePinPressed)
-        {
-            // Button just pressed
-            _wakePinPressed = true;
-            _wakePinPressStartMs = millis();
-        else if (!wakePressed && _wakePinPressed)
-        {
-            // Button released
-            _wakePinPressed = false;
-            uint32_t pressDuration = millis() - _wakePinPressStartMs;
-            
-            if (pressDuration > _longPressMs)
-            {
-                // Long press - abort
-                LOG_I(MODULE_PREFIX, "Time set aborted (long press)");
-            }
-            else if (pressDuration > 50)  // Debounce
-            {
-                // Short press - advance to next stage or complete
-                if (_currentState == SETTING_TIME_HOURS)
-                {
-                    _currentState = SETTING_TIME_MINUTES;
-                    _timeSetLastFlashMs = millis();
-                    _timeSetFlashState = true;
-                    LOG_I(MODULE_PREFIX, "Now setting minutes");
-                else if (_currentState == SETTING_TIME_MINUTES)
-                {
-                    // Complete
-                    LOG_I(MODULE_PREFIX, "Time setting complete");
-                }
-            }
-        }
-    }
+    // Get LED device and stop it
+    RaftDevice* pDevice = getDeviceByName("LEDPanel");
+    if (pDevice)
+        pDevice->sendCmdJSON("{\"cmd\":\"stop\"}");
 }

@@ -218,6 +218,42 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
     return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "unknownCommand");
 }
 
+RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
+{
+    // Parse JSON command
+    RaftJson json(jsonCmd);
+    String cmd = json.getString("cmd", "");
+    
+    if (cmd.equalsIgnoreCase("displayTime"))
+    {
+        int hour = json.getInt("hour", -1);
+        int minute = json.getInt("minute", -1);
+        displayTime(hour, minute);
+        return RAFT_OK;
+    }
+    else if (cmd.equalsIgnoreCase("clear"))
+    {
+        _panel.clear();
+        _lastMutateMs = millis();
+        return RAFT_OK;
+    }
+    else if (cmd.equalsIgnoreCase("start"))
+    {
+        if (_panel.start())
+        {
+            return RAFT_OK;
+        }
+        return RAFT_OTHER_FAILURE;
+    }
+    else if (cmd.equalsIgnoreCase("stop"))
+    {
+        _panel.stop();
+        return RAFT_OK;
+    }
+    
+    return RAFT_INVALID_DATA;
+}
+
 void DeviceLEDCharlie::displayTime(int hour, int minute)
 {
     // Round to minute granularity

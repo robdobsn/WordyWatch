@@ -8,9 +8,8 @@
 
 #pragma once
 
-#include <stdint.h>
+#include "RaftCore.h"
 #include "driver/i2c_master.h"
-#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -53,7 +52,7 @@ public:
     {
         if (!busHandle)
         {
-            ESP_LOGE("Accelerometer", "addToI2CBus: Invalid bus handle");
+            LOG_E(MODULE_PREFIX, "addToI2CBus: Invalid bus handle");
             return false;
         }
 
@@ -67,7 +66,7 @@ public:
         esp_err_t err = i2c_master_bus_add_device(busHandle, &dev_config, &_devHandle);
         if (err != ESP_OK)
         {
-            ESP_LOGE("Accelerometer", "addToI2CBus: Failed to add device: %s", esp_err_to_name(err));
+            LOG_E(MODULE_PREFIX, "addToI2CBus: Failed to add device: %s", esp_err_to_name(err));
             return false;
         }
 
@@ -80,7 +79,7 @@ public:
     {
         if (!_devHandle)
         {
-            ESP_LOGE("Accelerometer", "init: Device not added to I2C bus");
+            LOG_E(MODULE_PREFIX, "init: Device not added to I2C bus");
             return false;
         }
 
@@ -110,7 +109,7 @@ public:
             esp_err_t err = i2c_master_transmit(_devHandle, write_buf, sizeof(write_buf), 1000);
             if (err != ESP_OK)
             {
-                ESP_LOGE("Accelerometer", "init: Failed to write reg 0x%02x: %s", 
+                LOG_E(MODULE_PREFIX, "init: Failed to write reg 0x%02x: %s", 
                       initSequence[i].reg, esp_err_to_name(err));
                 return false;
             }
@@ -119,7 +118,7 @@ public:
             vTaskDelay(pdMS_TO_TICKS(10));
         }
 
-        ESP_LOGI("Accelerometer", "init: Configured LSM6DS for wrist tilt detection");
+        LOG_I(MODULE_PREFIX, "init: Configured LSM6DS for wrist tilt detection at address 0x%02X", _i2cAddr);
         
         // Clear any pending interrupts
         clearInterrupt();
@@ -128,8 +127,7 @@ public:
     }
 
     /// @brief Clear accelerometer interrupt by reading status registers
-    /// @param logFunc Optional logging function for debug output
-    void clearInterrupt(void (*logFunc)(const char*) = nullptr)
+    void clearInterrupt()
     {
         if (!_devHandle)
         {
@@ -151,16 +149,11 @@ public:
             esp_err_t err = i2c_master_transmit_receive(_devHandle, &reg, 1, &value, 1, 1000);
             if (err == ESP_OK)
             {
-                if (logFunc)
-                {
-                    char logBuf[64];
-                    snprintf(logBuf, sizeof(logBuf), "IMU: Cleared interrupt reg 0x%02X = 0x%02X\r\n", reg, value);
-                    logFunc(logBuf);
-                }
+                LOG_I(MODULE_PREFIX, "clearInterrupt: Read reg 0x%02x = 0x%02x", reg, value);
             }
             else
             {
-                ESP_LOGW("Accelerometer", "clearInterrupt: Failed to read reg 0x%02x: %s", 
+                LOG_W(MODULE_PREFIX, "clearInterrupt: Failed to read reg 0x%02x: %s", 
                       reg, esp_err_to_name(err));
             }
         }
@@ -193,4 +186,6 @@ public:
 private:
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
+
+    static constexpr const char* MODULE_PREFIX = "Acc";
 };

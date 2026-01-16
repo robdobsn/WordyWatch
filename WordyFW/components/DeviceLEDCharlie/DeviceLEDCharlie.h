@@ -36,13 +36,16 @@ public:
     std::vector<uint8_t> getStatusBinary() const override final;
     bool getDeviceTypeRecord(DeviceTypeRecordDynamic& devTypeRec) const override final;
 
-    // Public access to panel for sleep/wake control
-    LEDCharliePanel& getPanel() { return _panel; }
-    
+    /// @brief Send a JSON command to the device
+    /// @param jsonCmd JSON command
+    /// @return RaftRetCode
+    virtual RaftRetCode sendCmdJSON(const char* jsonCmd) override final;
+
+private:
     // Display time on LED panel
     void displayTime(int hour, int minute);
 
-private:
+    // Handle REST API control commands
     RaftRetCode apiControl(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     bool applyConfiguration();
 
