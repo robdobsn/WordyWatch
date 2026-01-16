@@ -18,6 +18,7 @@
 // #define DEBUG_POWER_MANAGEMENT
 // #define DEBUG_VSENSE_READING
 // #define DEBUG_BATTERY_CHECK
+// #define DEBUG_SLEEP_AND_WAKEUP
 
 class PowerAndSleep
 {
@@ -169,17 +170,24 @@ public:
     /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
     void enterLightSleep(int wakeupMs)
     {
+        // Check for wakeup time
         if (wakeupMs < 0)
         {
+#ifdef DEBUG_SLEEP_AND_WAKEUP
             LOG_I(MODULE_PREFIX, "Entering untimed light sleep");
-            esp_light_sleep_start();
-            return;
+#endif
         }
-        // Convert ms to microseconds
-        const uint64_t wakeup_time_us = wakeupMs * 1000; 
-        esp_sleep_enable_timer_wakeup(wakeup_time_us);
-        
-        LOG_I(MODULE_PREFIX, "Entering light sleep for %dms", wakeupMs);
+        else
+        {
+            // Convert ms to microseconds
+            const uint64_t wakeup_time_us = wakeupMs * 1000; 
+            esp_sleep_enable_timer_wakeup(wakeup_time_us);
+#ifdef DEBUG_SLEEP_AND_WAKEUP
+            LOG_I(MODULE_PREFIX, "Entering light sleep for %dms", wakeupMs);
+#endif
+        }
+
+        // Start light sleep
         esp_light_sleep_start();
     }
     
@@ -190,16 +198,21 @@ public:
     {
         if (wakeupMs < 0)
         {
+#ifdef DEBUG_SLEEP_AND_WAKEUP
             LOG_I(MODULE_PREFIX, "Entering untimed deep sleep (power pin %d held HIGH)", _powerCtrlPin);
-            esp_deep_sleep_start();
-            return;
+#endif
+        }
+        else
+        {
+            // Convert ms to microseconds
+            const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
+            esp_sleep_enable_timer_wakeup(wakeup_time_us);
+#ifdef DEBUG_SLEEP_AND_WAKEUP         
+            LOG_I(MODULE_PREFIX, "Entering deep sleep for %dms (power pin %d held HIGH)", wakeupMs, _powerCtrlPin);
+#endif
         }
 
-        // Convert ms to microseconds
-        const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
-        esp_sleep_enable_timer_wakeup(wakeup_time_us);
-        
-        LOG_I(MODULE_PREFIX, "Entering deep sleep for %dms (power pin %d held HIGH)", wakeupMs, _powerCtrlPin);
+        // Start deep sleep
         esp_deep_sleep_start();
     }
     
@@ -389,17 +402,4 @@ private:
             digitalWrite(_strapCtrlPin, HIGH);
         }
     }
-
-    /// @brief Get power control pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getPowerCtrlPin() const { return _powerCtrlPin; }
-    
-    /// @brief Get strap control pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getStrapCtrlPin() const { return _strapCtrlPin; }
-    
-    /// @brief Get VSENSE pin number
-    /// @return GPIO pin number or -1 if not configured
-    int getVSENSEPin() const { return _vsensePin; }
-
 };
