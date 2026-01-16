@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Power Management
-// Header-only class for voltage sensing, battery monitoring, and CPU power management
+// Power And Sleep Management
+// Header-only class for voltage sensing, battery monitoring, and CPU power & sleep management
 //
 // Rob Dobson 2025
 //
@@ -19,14 +19,14 @@
 // #define DEBUG_VSENSE_READING
 // #define DEBUG_BATTERY_CHECK
 
-class Power
+class PowerAndSleep
 {
 public:
     /// @brief Constructor
-    Power() = default;
+    PowerAndSleep() = default;
     
     /// @brief Destructor
-    ~Power() = default;
+    ~PowerAndSleep() = default;
 
     /// @brief Configure power management
     /// @param powerCtrlPin GPIO pin for power control (-1 to disable)
@@ -40,7 +40,8 @@ public:
     void configure(int powerCtrlPin, int strapCtrlPin, int vsensePin,
                    double vsenseSlope, double vsenseIntercept, 
                    float batteryLowV, uint32_t vsenseButtonLevel,
-                   uint32_t buttonOffTimeMs)
+                   uint32_t buttonOffTimeMs,
+                   int wakePinNum, bool wakePinPullup)
     {
         _powerCtrlPin = powerCtrlPin;
         _strapCtrlPin = strapCtrlPin;
@@ -50,6 +51,8 @@ public:
         _batteryLowV = batteryLowV;
         _vsenseButtonLevel = vsenseButtonLevel;
         _buttonOffTimeMs = buttonOffTimeMs;
+        _wakePinNum = wakePinNum;
+        _wakePinPullup = wakePinPullup;
         
         // Enable power hold
         enablePowerHold();
@@ -63,10 +66,21 @@ public:
             pinMode(_vsensePin, INPUT);
         }
 
+        // Configure wake pin if specified
+        if (_wakePinNum >= 0)
+        {
+            pinMode(_wakePinNum, INPUT);
+            if (_wakePinPullup)
+            {
+                gpio_pullup_en((gpio_num_t)_wakePinNum);
+            }
+        }
+
         // Debug
-        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d",
+        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d wakePinNum %d wakePinPullup %s",
                     powerCtrlPin, strapCtrlPin, vsensePin, 
-                    vsenseSlope, vsenseIntercept);
+                    vsenseSlope, vsenseIntercept,
+                    wakePinNum, wakePinPullup ? "enabled" : "disabled");
         
         // Mark as configured
         _configured = true;
@@ -152,10 +166,17 @@ public:
     }
     
     /// @brief Enter light sleep with timer wakeup
-    /// @param wakeupMs Wakeup time in milliseconds
-    void enterLightSleep(uint32_t wakeupMs)
+    /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
+    void enterLightSleep(int wakeupMs)
     {
-        const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
+        if (wakeupMs < 0)
+        {
+            LOG_I(MODULE_PREFIX, "Entering untimed light sleep");
+            esp_light_sleep_start();
+            return;
+        }
+        // Convert ms to microseconds
+        const uint64_t wakeup_time_us = wakeupMs * 1000; 
         esp_sleep_enable_timer_wakeup(wakeup_time_us);
         
         LOG_I(MODULE_PREFIX, "Entering light sleep for %dms", wakeupMs);
@@ -163,10 +184,18 @@ public:
     }
     
     /// @brief Enter deep sleep with timer wakeup
-    /// @param wakeupMs Wakeup time in milliseconds
+    /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
     /// @note Power control pin will be held HIGH during deep sleep
-    void enterDeepSleep(uint32_t wakeupMs)
+    void enterDeepSleep(int wakeupMs)
     {
+        if (wakeupMs < 0)
+        {
+            LOG_I(MODULE_PREFIX, "Entering untimed deep sleep (power pin %d held HIGH)", _powerCtrlPin);
+            esp_deep_sleep_start();
+            return;
+        }
+
+        // Convert ms to microseconds
         const uint64_t wakeup_time_us = wakeupMs * 1000; // Convert ms to microseconds
         esp_sleep_enable_timer_wakeup(wakeup_time_us);
         
@@ -190,6 +219,8 @@ private:
     int _powerCtrlPin = -1;
     int _strapCtrlPin = -1;
     int _vsensePin = -1;
+    int _wakePinNum = -1;
+    bool _wakePinPullup = false;
     
     // VSENSE to voltage conversion
     static constexpr float VSENSE_SLOPE_DEFAULT = 0.00223;

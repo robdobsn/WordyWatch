@@ -185,23 +185,9 @@
     "powerCtrlPin": 17,
     "strapCtrlPin": 1,
     "vsensePin": 2,
-    "batteryLowV": 3.55,
-    "vsenseButtonLevel": 1550,
-    "buttonOffTimeMs": 2000,
     "wakePinNum": 5,
     "wakePinPullup": true,
-    "sleepAfterBootMs": 5000,
-    "sleepAfterWakeMs": 1,
     "showTimeForMs": 5000,
-    "timerWakeupMs": 300,
-    "autoSleepEnable": true,
-    "uartLogPin": 16,
-    "adcCalib": {
-      "v1": 3.2,
-      "a1": 1002,
-      "v2": 4.16,
-      "a2": 1320
-    },
     "i2cSdaPin": 6,
     "i2cSclPin": 8,
     "i2cFreqHz": 10000,
@@ -209,8 +195,14 @@
     "rtcI2CAddr": "0x68",
     "minuteResolution": 5,
     "longPressMs": 2000,
-    "timeSetFlashOnMs": 500,
-    "timeSetFlashOffMs": 500,
-    "timeSetTimeoutMs": 30000
+    "adcCalib": {
+      "v1": 3.2,
+      "a1": 1002,
+      "v2": 4.16,
+      "a2": 1320
+    },
+    "batteryLowV": 3.55,
+    "vsenseButtonLevel": 1550,
+    "buttonOffTimeMs": 2000
   }
 }

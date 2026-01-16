@@ -93,32 +93,19 @@ void WordyWatch::setup()
         vsenseIntercept = v1 - vsenseSlope * a1;
     }
 
-    // Configure power management
-    _power.configure(powerCtrlPin, strapCtrlPin, vsensePin,
-                     vsenseSlope, vsenseIntercept,
-                     batteryLowV, vsenseButtonLevel, buttonOffTimeMs);
-
-    // Get sleep configuration
-    _sleepAfterBootMs = config.getLong("sleepAfterBootMs", 5000);
-    _sleepAfterWakeMs = config.getLong("sleepAfterWakeMs", 10000);
-    _showTimeForMs = config.getLong("showTimeForMs", 5000);
-    _timerWakeupMs = config.getLong("timerWakeupMs", 100);
-
     // Get wake pin configuration
     pinName = config.getString("wakePinNum", "");
-    _wakePinNum = ConfigPinMap::getPinFromName(pinName.c_str());
-    _wakePinPullup = config.getBool("wakePinPullup", false);
+    int wakePinNum = ConfigPinMap::getPinFromName(pinName.c_str());
+    bool wakePinPullup = config.getBool("wakePinPullup", false);
 
-    // Configure wake pin if specified
-    if (_wakePinNum >= 0)
-    {
-        pinMode(_wakePinNum, INPUT);
-        if (_wakePinPullup)
-        {
-            gpio_pullup_en((gpio_num_t)_wakePinNum);
-        }
-        LOG_I(MODULE_PREFIX, "setup wake pin %d pullup %s", _wakePinNum, _wakePinPullup ? "enabled" : "disabled");
-    }
+    // Configure power management
+    _powerAndSleep.configure(powerCtrlPin, strapCtrlPin, vsensePin,
+                     vsenseSlope, vsenseIntercept,
+                     batteryLowV, vsenseButtonLevel, buttonOffTimeMs,
+                     wakePinNum, wakePinPullup);
+
+    // Get sleep configuration
+    _showTimeForMs = config.getLong("showTimeForMs", 10000);
 
     // Get minute resolution
     _minuteResolution = config.getLong("minuteResolution", 5);
@@ -150,16 +137,16 @@ void WordyWatch::setup()
     }
 
     // Debug - do initial power reading
-    bool isShutdownRequired = _power.update();
+    bool isShutdownRequired = _powerAndSleep.update();
     LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f isShutdownRequired %d vSenseButtonLevel %d buttonOffTime %dms", 
                 powerCtrlPin, strapCtrlPin, vsensePin, 
-                (int)_power.getVSENSEReading(), 
-                _power.getBatteryVoltage(), 
+                (int)_powerAndSleep.getVSENSEReading(), 
+                _powerAndSleep.getBatteryVoltage(), 
                 batteryLowV, isShutdownRequired, vsenseButtonLevel, buttonOffTimeMs);
     
     // Initialize time last woken
     _timeLastWokenMs = millis();
-    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %dms", _sleepAfterWakeMs);
+    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %ds", _showTimeForMs/1000);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +154,7 @@ void WordyWatch::setup()
 void WordyWatch::loop()
 {
     // Update power management in all states - returns true if shutdown required
-    bool shutdownRequired = _power.update();
+    bool shutdownRequired = _powerAndSleep.update();
     if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
     {
         LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
@@ -195,7 +182,7 @@ void WordyWatch::loop()
             return;
 
         case SLEEPING:
-            _power.enterLightSleep(_timerWakeupMs);
+            _powerAndSleep.enterLightSleep(-1);
             setState(WOKEN_UP);
             return;
 
@@ -208,7 +195,7 @@ void WordyWatch::loop()
         case SHUTDOWN_REQUESTED:
             // Clear the display
             clearDisplay();
-            _power.shutdown();
+            _powerAndSleep.shutdown();
             setState(SHUTTING_DOWN);
             return;
         case SHUTTING_DOWN:
@@ -233,7 +220,7 @@ void WordyWatch::checkWakeupReason()
 // void WordyWatch::checkWakeupButtonPress()
 // {
 //     // Disable hold on power control pin to allow changes
-//     _power.disablePowerHold();
+//     _powerAndSleep.disablePowerHold();
 
 //     // Restore pull-up on wake pin after waking from sleep
 //     if (_wakePinNum >= 0 && _wakePinPullup)
@@ -260,7 +247,7 @@ void WordyWatch::checkWakeupReason()
 //     }
 
 //     // Re-enable hold on power control pin
-//     _power.enablePowerHold();
+//     _powerAndSleep.enablePowerHold();
 
 //     // If button is pressed, show time and stay awake
 //     if (wakeButtonPressed)
@@ -327,10 +314,10 @@ void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
 /// @return JSON string
 String WordyWatch::getStatusJSON() const
 {
-    String json = "{\"vSense\":" + String(_power.getVSENSEReading()) +
-        ",\"avgVSense\":" + String(_power.getVSENSEAverage()) +
-        ",\"calculatedV\":" + String(_power.getBatteryVoltage(), 2) +
-        ",\"buttonPressed\":" + String(_power.isPowerButtonPressed() ? "true" : "false") +
+    String json = "{\"vSense\":" + String(_powerAndSleep.getVSENSEReading()) +
+        ",\"avgVSense\":" + String(_powerAndSleep.getVSENSEAverage()) +
+        ",\"calculatedV\":" + String(_powerAndSleep.getBatteryVoltage(), 2) +
+        ",\"buttonPressed\":" + String(_powerAndSleep.isPowerButtonPressed() ? "true" : "false") +
         "}";
     return json;
 }

@@ -13,7 +13,7 @@
 #include "RaftSysMod.h"
 #include "Accelerometer.h"
 #include "RTC.h"
-#include "Power.h"
+#include "PowerAndSleep.h"
 #include "driver/i2c_master.h"
 
 class RaftJsonIF;
@@ -52,8 +52,8 @@ private:
     // Configuration applied
     bool _isConfigured = false;
 
-    // Power management
-    Power _power;
+    // Power & Sleep management
+    PowerAndSleep _powerAndSleep;
 
     // Sleep/wake state management
     WatchState _currentState = DISPLAYING_TIME;
@@ -63,15 +63,8 @@ private:
     uint32_t _timeLastWokenMs = 0;
 
     // Configuration parameters
-    uint32_t _sleepAfterBootMs = 5000;   // Default 5 seconds after boot
-    uint32_t _sleepAfterWakeMs = 10000;  // Default 10 seconds after wake
-    uint32_t _showTimeForMs = 5000;      // Default 5 seconds to show time when button pressed
-    uint32_t _timerWakeupMs = 100;       // Default 100ms timer wakeup interval
+    uint32_t _showTimeForMs = 10000;
 
-    // Wake pin configuration
-    int _wakePinNum = -1;
-    bool _wakePinPullup = false;
-    
     // Time setting configuration
     uint32_t _longPressMs = 2000;
     uint8_t _minuteResolution = 5;
