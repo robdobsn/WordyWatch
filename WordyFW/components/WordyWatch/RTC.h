@@ -12,7 +12,9 @@
 #include <time.h>
 #include "driver/i2c_master.h"
 
-#define DEBUG_SYSTEM_TIME_FROM_RTC
+#define DEBUG_SET_SYSTEM_TIME_FROM_RTC
+#define DEBUG_RTC_READ_TIME
+#define DEBUG_RAW_RTC_DATA
 class RTC
 {
 public:
@@ -153,10 +155,12 @@ public:
         }
 
         // Log raw RTC data for debugging
+#ifdef DEBUG_RAW_RTC_DATA
         LOG_I(MODULE_PREFIX, "readTime: Raw RTC data: %02X %02X %02X %02X %02X %02X %02X",
               time_data[0], time_data[1], time_data[2], time_data[3], 
               time_data[4], time_data[5], time_data[6]);
-        
+#endif
+
         // Convert BCD to decimal
         auto bcd_to_dec = [](uint8_t bcd) -> uint8_t {
             return ((bcd >> 4) * 10) + (bcd & 0x0F);
@@ -174,6 +178,11 @@ public:
         // Set DST flag to -1 (unknown)
         timeinfo->tm_isdst = -1;
 
+#ifdef DEBUG_RTC_READ_TIME
+        LOG_I(MODULE_PREFIX, "readTime: Time read from RTC: %04d-%02d-%02d %02d:%02d:%02d",
+              timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+              timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+#endif  
         return true;
     }
 
@@ -193,7 +202,7 @@ public:
         tv.tv_usec = 0;
         settimeofday(&tv, NULL);
 
-#ifdef DEBUG_SYSTEM_TIME_FROM_RTC 
+#ifdef DEBUG_SET_SYSTEM_TIME_FROM_RTC 
         LOG_I(MODULE_PREFIX, "System time set from RTC: %04d-%02d-%02d %02d:%02d:%02d", 
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);

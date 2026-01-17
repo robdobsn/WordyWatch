@@ -42,10 +42,10 @@ void DeviceLEDCharlie::loop()
     if (!_isConfigured)
         return;
 
-    if (Raft::isTimeout(millis(), _debugLastMs, 1000))
+    if (Raft::isTimeout(millis(), _debugLastMs, 10000))
     {
         _debugLastMs = millis();
-        LOG_I(MODULE_PREFIX, "loop: running=%d, timerCount=%u", _panel.isRunning() ? 1 : 0, _panel.debugGetTimerCount());
+        // LOG_I(MODULE_PREFIX, "loop: running=%d, timerCount=%u", _panel.isRunning() ? 1 : 0, _panel.debugGetTimerCount());
     }
 
     // if (_autostart && !_panel.isRunning())

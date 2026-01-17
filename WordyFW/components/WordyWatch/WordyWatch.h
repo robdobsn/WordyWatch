@@ -41,6 +41,7 @@ private:
     // Sleep state enum
     enum WatchState
     {
+        INITIAL_STATE,
         DISPLAYING_TIME,
         PREPARING_TO_SLEEP,
         SLEEPING,
@@ -56,7 +57,7 @@ private:
     PowerAndSleep _powerAndSleep;
 
     // Sleep/wake state management
-    WatchState _currentState = DISPLAYING_TIME;
+    WatchState _currentState = INITIAL_STATE;
     uint32_t _currentStateStartMs = 0;
 
     // Time last woken

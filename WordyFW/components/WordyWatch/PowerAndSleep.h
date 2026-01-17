@@ -15,10 +15,10 @@
 #include "driver/rtc_io.h"
 
 // Debug control
-// #define DEBUG_POWER_MANAGEMENT
-// #define DEBUG_VSENSE_READING
-// #define DEBUG_BATTERY_CHECK
-// #define DEBUG_SLEEP_AND_WAKEUP
+#define DEBUG_POWER_MANAGEMENT
+#define DEBUG_VSENSE_READING
+#define DEBUG_BATTERY_CHECK
+#define DEBUG_SLEEP_AND_WAKEUP
 
 class PowerAndSleep
 {
@@ -79,7 +79,7 @@ public:
         }
 
         // Debug
-        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d strapCtrlPin %d vSensePin %d vSenseSlope %.2f vSenseIntercept %.2f wakePinNum %d wakePinPullup %s",
+        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d strapCtrlPin %d vSensePin %d vSenseSlope %.2e vSenseIntercept %.2f wakePinNum %d wakePinPullup %s",
                     powerCtrlPin, strapCtrlPin, vsensePin,
                     vsenseSlope, vsenseIntercept,
                     wakePinNum, wakePinPullup ? "Y" : "N");
@@ -96,12 +96,9 @@ public:
         if (!_configured)
             return false;
             
-        // Read VSENSE
+        // Read VSENSE and update button state
         readVSENSE();
-        
-        // Check for user button press via VSENSE
-        checkUserButtonPress();
-        
+                
         // Check battery level periodically
         if (Raft::isTimeout(millis(), _lastBatteryCheckMs, BATTERY_CHECK_INTERVAL_MS))
         {
@@ -197,6 +194,10 @@ public:
     /// @note Power control pin will be held HIGH during deep sleep
     void enterDeepSleep(int wakeupMs)
     {
+        // Disable wake up sources first
+        esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+
+        // Check for wakeup time
         if (wakeupMs < 0)
         {
 #ifdef DEBUG_SLEEP_AND_WAKEUP
@@ -213,6 +214,16 @@ public:
 #endif
         }
 
+        // Check for wake pin
+        if (_wakePinNum >= 0)
+        {
+            esp_sleep_enable_ext1_wakeup(1ULL << _wakePinNum, ESP_EXT1_WAKEUP_ANY_LOW);
+#ifdef DEBUG_SLEEP_AND_WAKEUP
+            LOG_I(MODULE_PREFIX, "Deep sleep wakeup configured on pin %d (%s)", 
+                  _wakePinNum, _wakePinPullup ? "pullup" : "pulldown");
+#endif
+        }
+
         // Start deep sleep
         esp_deep_sleep_start();
     }
@@ -226,88 +237,39 @@ public:
     }
 
 private:
-    // Configuration
-    bool _configured = false;
-    
-    // GPIO pins
-    int _powerCtrlPin = -1;
-    int _strapCtrlPin = -1;
-    int _vsensePin = -1;
-    int _wakePinNum = -1;
-    bool _wakePinPullup = false;
-    
-    // VSENSE to voltage conversion
-    static constexpr float VSENSE_SLOPE_DEFAULT = 0.00223;
-    static constexpr float VSENSE_INTERCEPT_DEFAULT = 0.0;
-    double _vsenseSlope = VSENSE_SLOPE_DEFAULT;
-    double _vsenseIntercept = VSENSE_INTERCEPT_DEFAULT;
-    
-    // Battery management
-    static constexpr float BATTERY_LOW_V_DEFAULT = 3.55;
-    float _batteryLowV = BATTERY_LOW_V_DEFAULT;
-    bool _shutdownRequired = false;
-    uint32_t _lastBatteryCheckMs = 0;
-    static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 10000;  // Check every 10s
-    uint32_t _lastWarnBatLowShutdownTimeMs = 0;
-    
-    // VSENSE readings
-    uint32_t _vsenseCurVal = 0;
-    SimpleMovingAverage<100> _vsenseAvg;
-    uint32_t _vsenseSampleCount = 0;
-    
-    // Button detection via VSENSE
-    static constexpr uint32_t VSENSE_BUTTON_LEVEL_DEFAULT = 2300;
-    uint32_t _vsenseButtonLevel = VSENSE_BUTTON_LEVEL_DEFAULT;
-    bool _buttonPressed = false;
-    uint32_t _buttonPressChangeTimeMs = 0;
-    uint32_t _buttonPressDownTimeMs = 0;
-    static constexpr uint32_t BUTTON_OFF_TIME_MS_DEFAULT = 2000;
-    uint32_t _buttonOffTimeMs = BUTTON_OFF_TIME_MS_DEFAULT;
-    
-    // Power timing
-    static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;
-
-    // Debug
-    static constexpr const char* MODULE_PREFIX = "Power";
-    
     /// @brief Read VSENSE pin and update average
     void readVSENSE()
     {
-        if (_vsensePin < 0)
+        // Check if VSENSE pin configured and time to read
+        if ((_vsensePin < 0) || !Raft::isTimeout(millis(), _vsenseLastReadMs, VSENSE_READ_INTERVAL_MS))
             return;
-            
+        _vsenseLastReadMs = millis();
+        
+        // Read VSENSE pin
         _vsenseCurVal = analogRead(_vsensePin);
-        
-#ifdef DEBUG_VSENSE_READING
-        if (_vsenseSampleCount % 100 == 0)
-        {
-            LOG_I(MODULE_PREFIX, "VSENSE: inst=%d avg=%d V=%.2fV",
-                  _vsenseCurVal, _vsenseAvg.getAverage(), getBatteryVoltage());
-        }
-#endif
-    }
-    
-    /// @brief Check for user button press via VSENSE
-    /// The button is wired such that when pressed, VSENSE rises above threshold
-    void checkUserButtonPress()
-    {
-        // Read current VSENSE value
-        uint32_t vsenseVal = _vsenseCurVal;
-        
+
         // Check if button is pressed (VSENSE above threshold)
-        if (vsenseVal > _vsenseButtonLevel)
+        if (_vsenseCurVal > _vsenseButtonLevel)
         {
-            // Note time press started
+            // Check if press just started
             if (!_buttonPressed)
+            {
+                // Record press down time
                 _buttonPressDownTimeMs = millis();
-                
+                _buttonPressed = true;
+            
+#ifdef DEBUG_POWER_MANAGEMENT
+            LOG_I(MODULE_PREFIX, "Button pressed at %dms", 
+                    (int)_buttonPressDownTimeMs);
+#endif
+            }
+
             // Pressed
-            _buttonPressed = true;
             _buttonPressChangeTimeMs = millis();
         }
         else
         {
-            // Not pressed - debounce
+            // Not pressed currently - check if recently released
             if (_buttonPressed)
             {
                 if (Raft::isTimeout(millis(), _buttonPressChangeTimeMs, 200))
@@ -322,9 +284,22 @@ private:
             }
             else
             {
-                // Average vsense values when button not pressed
-                _vsenseAvg.sample(vsenseVal);
+                // Button not pressed so we can use this reading as battery voltage sample
+                _vsenseAvg.sample(_vsenseCurVal);
                 _vsenseSampleCount++;
+
+                // Calculate battery level from average
+                _batteryV = getVoltageFromADCReading(_vsenseAvg.getAverage());
+                _batteryValid = (_vsenseSampleCount >= 100);
+
+#ifdef DEBUG_VSENSE_READING
+                if (_vsenseSampleCount % 10 == 0)
+                {
+                    LOG_I(MODULE_PREFIX, "VSENSE: inst=%d avg=%d V=%.2fV batteryReadingValid=%s",
+                          (int)_vsenseCurVal, _vsenseAvg.getAverage(), _batteryV, _batteryValid ? "Y" : "N");
+                }
+#endif
+
             }
         }
     }
@@ -332,15 +307,12 @@ private:
     /// @brief Check battery level and require shutdown if low
     void checkBatteryLevel()
     {
-        // Need enough samples before checking
-        if (_shutdownRequired || _vsenseSampleCount < 100)
+        // Check if already shutting down or battery not valid
+        if (_shutdownRequired || !_batteryValid)
             return;
             
-        // Get voltage
-        float voltage = getBatteryVoltage();
-        
         // Check for shutdown
-        if (voltage < _batteryLowV)
+        if (_batteryV < _batteryLowV)
         {
 #ifdef DEBUG_BATTERY_CHECK
             if (Raft::isTimeout(millis(), _lastWarnBatLowShutdownTimeMs, 1000))
@@ -351,7 +323,7 @@ private:
 #else
                       "!!! SHUTDOWN DISABLED !!!",
 #endif
-                      voltage, _batteryLowV);
+                        _batteryV, _batteryLowV);
                 _lastWarnBatLowShutdownTimeMs = millis();
             }
 #endif
@@ -403,4 +375,53 @@ private:
             digitalWrite(_strapCtrlPin, HIGH);
         }
     }
+
+private:
+    // Configuration
+    bool _configured = false;
+    
+    // GPIO pins
+    int _powerCtrlPin = -1;
+    int _strapCtrlPin = -1;
+    int _vsensePin = -1;
+    int _wakePinNum = -1;
+    bool _wakePinPullup = false;
+    
+    // VSENSE to voltage conversion
+    static constexpr float VSENSE_SLOPE_DEFAULT = 0.00223;
+    static constexpr float VSENSE_INTERCEPT_DEFAULT = 0.0;
+    double _vsenseSlope = VSENSE_SLOPE_DEFAULT;
+    double _vsenseIntercept = VSENSE_INTERCEPT_DEFAULT;
+    
+    // Battery management
+    float _batteryV = 0.0f;
+    bool _batteryValid = false;
+    static constexpr float BATTERY_LOW_V_DEFAULT = 3.55;
+    float _batteryLowV = BATTERY_LOW_V_DEFAULT;
+    bool _shutdownRequired = false;
+    uint32_t _lastBatteryCheckMs = 0;
+    static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 10000;
+    uint32_t _lastWarnBatLowShutdownTimeMs = 0;
+    
+    // VSENSE readings
+    uint32_t _vsenseLastReadMs = 0;
+    static constexpr uint32_t VSENSE_READ_INTERVAL_MS = 100;
+    uint32_t _vsenseCurVal = 0;
+    SimpleMovingAverage<100> _vsenseAvg;
+    uint32_t _vsenseSampleCount = 0;
+    
+    // Button detection via VSENSE
+    static constexpr uint32_t VSENSE_BUTTON_LEVEL_DEFAULT = 2300;
+    uint32_t _vsenseButtonLevel = VSENSE_BUTTON_LEVEL_DEFAULT;
+    bool _buttonPressed = false;
+    uint32_t _buttonPressChangeTimeMs = 0;
+    uint32_t _buttonPressDownTimeMs = 0;
+    static constexpr uint32_t BUTTON_OFF_TIME_MS_DEFAULT = 2000;
+    uint32_t _buttonOffTimeMs = BUTTON_OFF_TIME_MS_DEFAULT;
+    
+    // Power timing
+    static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;
+
+    // Debug
+    static constexpr const char* MODULE_PREFIX = "Power&Sleep";
 };

@@ -23,15 +23,8 @@
 #include <sys/time.h>
 
 // Debug control - uncomment to enable specific debugging
-// #define DEBUG_LOOP_STATE_MACHINE
+#define DEBUG_LOOP_STATE_MACHINE
 #define DEBUG_TIME_DISPLAY
-#define DEBUG_USER_BUTTON_PRESS
-// #define DEBUG_POWER_CONTROL
-#define DEBUG_BATTERY_CHECK
-#define DEBUG_SLEEP_WAKEUP
-// #define DEBUG_BOOT_BUTTON_PRESS
-#define DEBUG_VSENSE_READING
-#define DEBUG_DISPLAY_OPERATIONS
 
 namespace
 {
@@ -146,62 +139,69 @@ void WordyWatch::setup()
     
     // Initialize time last woken
     _timeLastWokenMs = millis();
-    LOG_I(MODULE_PREFIX, "setup complete, will enter sleep after %ds", _showTimeForMs/1000);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Main loop for the WordyWatch device (called frequently)
 void WordyWatch::loop()
 {
-//     // Update power management in all states - returns true if shutdown required
-//     bool shutdownRequired = _powerAndSleep.update();
-//     if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
-//     {
-//         LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
-//         setState(SHUTDOWN_REQUESTED);
-//     }
+    // Update power management in all states - returns true if shutdown required
+    bool shutdownRequired = _powerAndSleep.update();
+    if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
+    {
+        LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
+        setState(SHUTDOWN_REQUESTED);
+    }
 
-//     // Handle state machine
-//     switch (_currentState)
-//     {
-//         case DISPLAYING_TIME:
-//             // Displaying time
-//             if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
-//             {
-// #ifdef DEBUG_LOOP_STATE_MACHINE
-//                 LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
-// #endif
-//                 setState(PREPARING_TO_SLEEP);
-//                 return;
-//             }
-//             break;
+    // Handle state machine
+    switch (_currentState)
+    {
+        case INITIAL_STATE:
+            // Initial state - go to displaying time
+            LOG_I(MODULE_PREFIX, "loop initial state, going to display time");
+            showTimeOnDisplay();
+            setState(DISPLAYING_TIME);
+            return;
+        case DISPLAYING_TIME:
+            // Displaying time
+            if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
+            {
+#ifdef DEBUG_LOOP_STATE_MACHINE
+                LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
+#endif
+                setState(PREPARING_TO_SLEEP);
+                return;
+            }
+            break;
 
-//         case PREPARING_TO_SLEEP:
-//             clearDisplay();
-//             setState(SLEEPING);
-//             return;
+        case PREPARING_TO_SLEEP:
+            clearDisplay();
+            setState(SLEEPING);
+            return;
 
-//         case SLEEPING:
-//             _powerAndSleep.enterLightSleep(-1);
-//             setState(WOKEN_UP);
-//             return;
+        case SLEEPING:
+            _powerAndSleep.enterDeepSleep(-1);
 
-//         case WOKEN_UP:
-//             // Check wakeup reason
-//             checkWakeupReason();
-//             _timeLastWokenMs = millis();
-//             setState(DISPLAYING_TIME);
-//             return;
-//         case SHUTDOWN_REQUESTED:
-//             // Clear the display
-//             clearDisplay();
-//             _powerAndSleep.shutdown();
-//             setState(SHUTTING_DOWN);
-//             return;
-//         case SHUTTING_DOWN:
-//             // Do nothing - waiting for shutdown            
-//             return;
-//     }
+            // Note that we will not return from deep sleep as it will reset the CPU
+            setState(WOKEN_UP);
+            return;
+
+        case WOKEN_UP:
+            // Check wakeup reason
+            checkWakeupReason();
+            _timeLastWokenMs = millis();
+            setState(DISPLAYING_TIME);
+            return;
+        case SHUTDOWN_REQUESTED:
+            // Clear the display
+            clearDisplay();
+            _powerAndSleep.shutdown();
+            setState(SHUTTING_DOWN);
+            return;
+        case SHUTTING_DOWN:
+            // Do nothing - waiting for shutdown            
+            return;
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -210,9 +210,9 @@ void WordyWatch::checkWakeupReason()
 {
     // Get wakeup reason
     esp_sleep_wakeup_cause_t wakeupReason = esp_sleep_get_wakeup_cause();
-#ifdef DEBUG_SLEEP_WAKEUP
+// #ifdef DEBUG_SLEEP_WAKEUP
     LOG_I(MODULE_PREFIX, "checkWakeupReason woke up, reason %d", wakeupReason);
-#endif
+// #endif
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,7 +428,7 @@ RaftRetCode WordyWatch::apiSetTime(const String& reqStr, String& respStr, const 
 /// @brief Clear the display
 void WordyWatch::clearDisplay()
 {
-#ifdef DEBUG_DISPLAY_OPERATIONS
+#ifdef DEBUG_TIME_DISPLAY
     LOG_I(MODULE_PREFIX, "clearDisplay stopping LED panel");
 #endif
 
