@@ -156,7 +156,7 @@
     "Devices": [
       {
         "enable": 1,
-        "class": "LEDCharlie",
+        "class": "LEDPanel",
         "name": "LEDPanel",
         "width": 12,
         "height": 11,

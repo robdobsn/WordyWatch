@@ -105,4 +105,6 @@ private:
     bool _isConfigured = false;
 
     RaftMutex _fbLock;
+
+    static constexpr const char* MODULE_PREFIX = "LEDCharliePanel";
 };

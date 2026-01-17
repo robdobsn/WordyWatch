@@ -44,6 +44,7 @@ public:
                    uint32_t buttonOffTimeMs,
                    int wakePinNum, bool wakePinPullup)
     {
+        // Store configuration
         _powerCtrlPin = powerCtrlPin;
         _strapCtrlPin = strapCtrlPin;
         _vsensePin = vsensePin;
@@ -78,11 +79,11 @@ public:
         }
 
         // Debug
-        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d  strapCtrlPin %d vSensePin %d v1 %.2f a1 %d v2 %.2f a2 %d wakePinNum %d wakePinPullup %s",
-                    powerCtrlPin, strapCtrlPin, vsensePin, 
+        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d strapCtrlPin %d vSensePin %d vSenseSlope %.2f vSenseIntercept %.2f wakePinNum %d wakePinPullup %s",
+                    powerCtrlPin, strapCtrlPin, vsensePin,
                     vsenseSlope, vsenseIntercept,
-                    wakePinNum, wakePinPullup ? "enabled" : "disabled");
-        
+                    wakePinNum, wakePinPullup ? "Y" : "N");
+
         // Mark as configured
         _configured = true;
     }

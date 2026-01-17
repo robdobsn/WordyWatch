@@ -51,8 +51,11 @@ private:
 
     LEDCharliePanel _panel;
     bool _isConfigured = false;
-    bool _autostart = true;
     uint32_t _lastMutateMs = 0;
 
     uint32_t _debugLastMs = 0;
+
+    // Debug
+    static constexpr const char* MODULE_PREFIX = "DeviceLEDCharlie";
+
 };

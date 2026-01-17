@@ -17,7 +17,7 @@ RaftCoreApp raftCoreApp;
 extern "C" void app_main(void)
 {
     // Register charlie LED device
-    deviceFactory.registerDevice("LEDCharlie", DeviceLEDCharlie::create);
+    deviceFactory.registerDevice("LEDPanel", DeviceLEDCharlie::create);
 
     // Serial Console
     raftCoreApp.registerSysMod("SerialConsole", SerialConsole::create);

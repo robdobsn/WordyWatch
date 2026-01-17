@@ -117,7 +117,7 @@ void WordyWatch::setup()
     _i2cSclPin = ConfigPinMap::getPinFromName(pinName.c_str());
     _i2cFreqHz = config.getLong("i2cFreqHz", 100000);
     _accelerometer.setI2CAddress(config.getLong("accelI2CAddr", 0x6a));
-    _rtc.setI2CAddress(config.getLong("rtcI2CAddr", 0x68));
+    _rtc.setI2CConfig(config.getLong("rtcI2CAddr", 0x52), config.getString("rtcDevType", ""));
 
     // Initialize I2C if pins configured
     if (initI2C())
@@ -153,55 +153,55 @@ void WordyWatch::setup()
 /// @brief Main loop for the WordyWatch device (called frequently)
 void WordyWatch::loop()
 {
-    // Update power management in all states - returns true if shutdown required
-    bool shutdownRequired = _powerAndSleep.update();
-    if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
-    {
-        LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
-        setState(SHUTDOWN_REQUESTED);
-    }
+//     // Update power management in all states - returns true if shutdown required
+//     bool shutdownRequired = _powerAndSleep.update();
+//     if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
+//     {
+//         LOG_I(MODULE_PREFIX, "loop shutdown requested by power management");
+//         setState(SHUTDOWN_REQUESTED);
+//     }
 
-    // Handle state machine
-    switch (_currentState)
-    {
-        case DISPLAYING_TIME:
-            // Displaying time
-            if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
-            {
-#ifdef DEBUG_LOOP_STATE_MACHINE
-                LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
-#endif
-                setState(PREPARING_TO_SLEEP);
-                return;
-            }
-            break;
+//     // Handle state machine
+//     switch (_currentState)
+//     {
+//         case DISPLAYING_TIME:
+//             // Displaying time
+//             if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
+//             {
+// #ifdef DEBUG_LOOP_STATE_MACHINE
+//                 LOG_I(MODULE_PREFIX, "loop time display duration expired, going to sleep");
+// #endif
+//                 setState(PREPARING_TO_SLEEP);
+//                 return;
+//             }
+//             break;
 
-        case PREPARING_TO_SLEEP:
-            clearDisplay();
-            setState(SLEEPING);
-            return;
+//         case PREPARING_TO_SLEEP:
+//             clearDisplay();
+//             setState(SLEEPING);
+//             return;
 
-        case SLEEPING:
-            _powerAndSleep.enterLightSleep(-1);
-            setState(WOKEN_UP);
-            return;
+//         case SLEEPING:
+//             _powerAndSleep.enterLightSleep(-1);
+//             setState(WOKEN_UP);
+//             return;
 
-        case WOKEN_UP:
-            // Check wakeup reason
-            checkWakeupReason();
-            _timeLastWokenMs = millis();
-            setState(DISPLAYING_TIME);
-            return;
-        case SHUTDOWN_REQUESTED:
-            // Clear the display
-            clearDisplay();
-            _powerAndSleep.shutdown();
-            setState(SHUTTING_DOWN);
-            return;
-        case SHUTTING_DOWN:
-            // Do nothing - waiting for shutdown            
-            return;
-    }
+//         case WOKEN_UP:
+//             // Check wakeup reason
+//             checkWakeupReason();
+//             _timeLastWokenMs = millis();
+//             setState(DISPLAYING_TIME);
+//             return;
+//         case SHUTDOWN_REQUESTED:
+//             // Clear the display
+//             clearDisplay();
+//             _powerAndSleep.shutdown();
+//             setState(SHUTTING_DOWN);
+//             return;
+//         case SHUTTING_DOWN:
+//             // Do nothing - waiting for shutdown            
+//             return;
+//     }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -17,11 +17,6 @@
 #include "APISourceInfo.h"
 #include "wordclock_patterns.h"
 
-namespace
-{
-    static constexpr const char* MODULE_PREFIX = "DeviceLEDCharlie";
-}
-
 DeviceLEDCharlie::DeviceLEDCharlie(const char* pClassName, const char* pDevConfigJson)
     : RaftDevice(pClassName, pDevConfigJson)
 {
@@ -39,14 +34,6 @@ void DeviceLEDCharlie::setup()
     {
         LOG_E(MODULE_PREFIX, "setup configuration failed");
         return;
-    }
-
-    if (_autostart)
-    {
-        if (!_panel.start())
-        {
-            LOG_E(MODULE_PREFIX, "setup failed to start panel");
-        }
     }
 }
 
@@ -226,6 +213,10 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     
     if (cmd.equalsIgnoreCase("displayTime"))
     {
+        if (!_panel.start())
+        {
+            LOG_E(MODULE_PREFIX, "sendCmdJSON failed to start panel");
+        }
         int hour = json.getInt("hour", -1);
         int minute = json.getInt("minute", -1);
         displayTime(hour, minute);
@@ -307,7 +298,6 @@ bool DeviceLEDCharlie::applyConfiguration()
     uint32_t refreshHz = static_cast<uint32_t>(deviceConfig.getInt("refreshHz", 800));
     uint32_t scanMinSeqLen = static_cast<uint32_t>(deviceConfig.getInt("scanMinSeqLen", 20));
     bool originFlip = deviceConfig.getBool("originFlip", false);
-    _autostart = deviceConfig.getBool("autoStart", true);
 
     std::vector<int> pinList;
     deviceConfig.getArrayInts("pins", pinList);

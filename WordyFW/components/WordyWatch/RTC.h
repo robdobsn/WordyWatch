@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// RTC - RV-4162-C7 Real-Time Clock
+// RTC - Real-Time Clock (RV-4162-C7 / RV-3028-C7)
 //
 // Rob Dobson 2025
 //
@@ -16,11 +16,20 @@
 class RTC
 {
 public:
+    /// @brief Enumeration for RTC device types
+    enum class RTCDeviceType
+    {
+        RV4162C7,
+        RV3028C7,
+        UNKNOWN
+    };
+
     /// @brief Constructor
-    /// @param i2cAddr I2C address of the RTC (default 0x68 for RV-4162-C7)
+    /// @param i2cAddr I2C address of the RTC (default 0x68 for RV-4162-C7, 0x52 for RV-3028-C7)
     explicit RTC(uint8_t i2cAddr = 0x68)
         : _i2cAddr(i2cAddr)
         , _devHandle(nullptr)
+        , _deviceType(RTCDeviceType::RV3028C7)
     {
     }
 
@@ -37,11 +46,22 @@ public:
         return _i2cAddr;
     }
 
-    /// @brief Set I2C address
+    /// @brief Set I2C config
     /// @param addr New I2C address
-    void setI2CAddress(uint8_t addr)
+    /// @param devType Device type string
+    void setI2CConfig(uint8_t addr, const String& devType)
     {
         _i2cAddr = addr;
+
+        // Remove dashes from device type
+        String devTypeClean = devType;
+        devTypeClean.replace("-", "");
+        if (devTypeClean.equalsIgnoreCase("RV4162C7"))
+            _deviceType = RTCDeviceType::RV4162C7;
+        else if (devTypeClean.equalsIgnoreCase("RV3028C7"))
+            _deviceType = RTCDeviceType::RV3028C7;
+        else
+            _deviceType = RTCDeviceType::UNKNOWN;
     }
 
     /// @brief Add RTC device to I2C bus
@@ -73,7 +93,7 @@ public:
         return true;
     }
 
-    /// @brief Initialize RV-4162-C7 RTC device
+    /// @brief Initialize RTC device
     /// @return True if successful
     bool init()
     {
@@ -83,8 +103,19 @@ public:
             return false;
         }
 
-        // Enable 32.768 kHz output on CLKOUT pin (register 0x0F, FD bits = 000)
-        uint8_t clkout_config[2] = {0x0F, 0x00};  // Extension Register, FD[2:0] = 000 for 32.768 kHz
+        // Enable 32.768 kHz output on CLKOUT pin (device-specific register)
+        uint8_t clkout_config[2];
+        if (_deviceType == RTCDeviceType::RV3028C7)
+        {
+            clkout_config[0] = 0x35;  // CLKOUT Control register
+            clkout_config[1] = 0x80;  // Enable CLKOUT at 32.768 kHz (bit 7=1, FD[1:0]=00)
+        }
+        else  // RV4162C7
+        {
+            clkout_config[0] = 0x0F;  // Extension Register
+            clkout_config[1] = 0x00;  // FD[2:0] = 000 for 32.768 kHz
+        }
+        
         esp_err_t err = i2c_master_transmit(_devHandle, clkout_config, sizeof(clkout_config), 1000);
         if (err != ESP_OK)
         {
@@ -99,7 +130,7 @@ public:
         return true;
     }
 
-    /// @brief Read time from RV-4162-C7 RTC
+    /// @brief Read time from RTC
     /// @param timeinfo Pointer to tm structure to fill with time data
     /// @return True if successful
     bool readTime(struct tm* timeinfo)
@@ -109,9 +140,9 @@ public:
             return false;
         }
 
-        // RV-4162-C7 time registers start at 0x01
+        // Time registers start postion
         // Read 7 bytes: Seconds, Minutes, Hours, Weekday, Date, Month, Year
-        uint8_t reg_addr = 0x01;
+        uint8_t reg_addr = _deviceType == RTCDeviceType::RV3028C7 ? 0x00 : 0x01;
         uint8_t time_data[7];
         
         esp_err_t err = i2c_master_transmit_receive(_devHandle, &reg_addr, 1, time_data, sizeof(time_data), 1000);
@@ -189,7 +220,7 @@ public:
         return true;
     }
 
-    /// @brief Write time to RV-4162-C7 RTC
+    /// @brief Write time to RTC
     /// @param timeinfo Pointer to tm structure with time data to write
     /// @return True if successful
     bool writeTime(const struct tm* timeinfo)
@@ -206,7 +237,7 @@ public:
 
         // Prepare time data (register address + 7 bytes of time data)
         uint8_t write_buf[8];
-        write_buf[0] = 0x01;  // Starting register address
+        write_buf[0] = _deviceType == RTCDeviceType::RV3028C7 ? 0x00 : 0x01;  // Starting register address
         write_buf[1] = dec_to_bcd(timeinfo->tm_sec);           // Seconds (0-59)
         write_buf[2] = dec_to_bcd(timeinfo->tm_min);           // Minutes (0-59)
         write_buf[3] = dec_to_bcd(timeinfo->tm_hour);          // Hours (0-23)
@@ -256,6 +287,7 @@ public:
 private:
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
+    RTCDeviceType _deviceType;                  // Device type
 
     static constexpr const char* MODULE_PREFIX = "RTC";
 };

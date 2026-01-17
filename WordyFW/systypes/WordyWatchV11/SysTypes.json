@@ -156,7 +156,7 @@
     "Devices": [
       {
         "enable": 1,
-        "class": "LEDCharlie",
+        "class": "LEDPanel",
         "name": "LEDPanel",
         "width": 12,
         "height": 11,
@@ -192,7 +192,8 @@
     "i2cSclPin": 8,
     "i2cFreqHz": 10000,
     "accelI2CAddr": "0x6a",
-    "rtcI2CAddr": "0x68",
+    "rtcI2CAddr": "0x52",
+    "rtcDevType": "RV-3028-C7",
     "minuteResolution": 5,
     "longPressMs": 2000,
     "adcCalib": {

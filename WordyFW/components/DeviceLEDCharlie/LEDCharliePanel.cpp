@@ -20,11 +20,6 @@
 
 // #define DEBUG_LED_MASKS
 
-namespace
-{
-    static constexpr const char* MODULE_PREFIX = "LEDCharliePanel";
-}
-
 LEDCharliePanel::LEDCharliePanel()
 {
     RaftMutex_init(_fbLock);
@@ -271,6 +266,7 @@ bool LEDCharliePanel::configureTimer()
     config.clk_src = GPTIMER_CLK_SRC_DEFAULT;
     config.direction = GPTIMER_COUNT_UP;
     config.resolution_hz = _timerResolutionHz;
+    config.flags.allow_pd = true;
 
     esp_err_t err = gptimer_new_timer(&config, &_timer);
     if (err != ESP_OK)
