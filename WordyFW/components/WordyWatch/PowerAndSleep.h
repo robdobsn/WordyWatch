@@ -168,6 +168,7 @@ public:
     /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
     void enterLightSleep(int wakeupMs)
     {
+#ifdef FEATURE_POWER_CONTROL_ENABLE_SLEEP
         // Check for wakeup time
         if (wakeupMs < 0)
         {
@@ -187,6 +188,8 @@ public:
 
         // Start light sleep
         esp_light_sleep_start();
+
+#endif
     }
     
     /// @brief Enter deep sleep with timer wakeup
@@ -194,6 +197,7 @@ public:
     /// @note Power control pin will be held HIGH during deep sleep
     void enterDeepSleep(int wakeupMs)
     {
+#ifdef FEATURE_POWER_CONTROL_ENABLE_SLEEP
         // Disable wake up sources first
         esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
 
@@ -226,6 +230,7 @@ public:
 
         // Start deep sleep
         esp_deep_sleep_start();
+#endif
     }
     
     /// @brief Reset button press state

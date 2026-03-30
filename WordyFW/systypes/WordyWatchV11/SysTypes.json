@@ -197,12 +197,12 @@
     "minuteResolution": 5,
     "longPressMs": 2000,
     "adcCalib": {
-      "v1": 3.0,
-      "a1": 625,
-      "v2": 4.2,
-      "a2": 848
+      "v1": 3.52,
+      "a1": 1156,
+      "v2": 4.32,
+      "a2": 1413
     },
-    "batteryLowV": 3.55,
+    "batteryLowV": 3.45,
     "vsenseButtonLevel": 1550,
     "buttonOffTimeMs": 2000
   }

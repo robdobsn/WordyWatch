@@ -12,6 +12,7 @@
 #include "ConfigPinMap.h"
 #include "RaftUtils.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 #include "driver/i2c_master.h"
@@ -30,6 +31,12 @@ namespace
 {
     static constexpr const char* MODULE_PREFIX = "WordyWatch";
 }
+
+#ifdef DEBUG_WRIST_TILT_INT
+// Static members for ISR access
+volatile uint32_t WordyWatch::_wristTiltIntCount = 0;
+volatile int64_t WordyWatch::_wristTiltIntLastIsrTimeUs = 0;
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Constructor for WordyWatch
@@ -122,12 +129,18 @@ void WordyWatch::setup()
         
         // Initialize RTC
         _rtc.init();
+        _rtc.disableInterrupts();
         _rtc.setSystemTimeFromRTC();
     }
     else
     {
         LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
     }
+
+#ifdef DEBUG_WRIST_TILT_INT
+    // Install GPIO ISR to count wrist tilt interrupts on wake pin
+    setupWristTiltInterrupt(wakePinNum);
+#endif
 
     // Debug - do initial power reading
     bool isShutdownRequired = _powerAndSleep.update();
@@ -145,6 +158,11 @@ void WordyWatch::setup()
 /// @brief Main loop for the WordyWatch device (called frequently)
 void WordyWatch::loop()
 {
+#ifdef DEBUG_WRIST_TILT_INT
+    // Periodically log wrist tilt interrupt count
+    logWristTiltInterrupts();
+#endif
+
     // Update power management in all states - returns true if shutdown required
     bool shutdownRequired = _powerAndSleep.update();
     if (shutdownRequired && (_currentState != SHUTTING_DOWN) && (_currentState != SHUTDOWN_REQUESTED))
@@ -214,6 +232,104 @@ void WordyWatch::checkWakeupReason()
     LOG_I(MODULE_PREFIX, "checkWakeupReason woke up, reason %d", wakeupReason);
 // #endif
 }
+
+#ifdef DEBUG_WRIST_TILT_INT
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief ISR for wrist tilt interrupt (falling edge on shared INT line)
+void IRAM_ATTR WordyWatch::wristTiltISR(void* arg)
+{
+    _wristTiltIntCount = _wristTiltIntCount + 1;
+    _wristTiltIntLastIsrTimeUs = esp_timer_get_time();
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Setup GPIO ISR on wake pin to count wrist tilt interrupts
+/// @param pinNum GPIO pin number for the interrupt
+void WordyWatch::setupWristTiltInterrupt(int pinNum)
+{
+    if (pinNum < 0)
+    {
+        LOG_W(MODULE_PREFIX, "setupWristTiltInterrupt: no wake pin configured");
+        return;
+    }
+
+    _wristTiltIntPin = pinNum;
+    _wristTiltIntCount = 0;
+
+    // Configure GPIO for falling edge interrupt (active-low, open-drain with pull-up)
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_NEGEDGE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1ULL << pinNum);
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    esp_err_t err = gpio_config(&io_conf);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_config failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    // Install ISR service and add handler
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_install_isr_service failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = gpio_isr_handler_add((gpio_num_t)pinNum, wristTiltISR, nullptr);
+    if (err != ESP_OK)
+    {
+        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_isr_handler_add failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    LOG_I(MODULE_PREFIX, "setupWristTiltInterrupt: ISR installed on GPIO %d (falling edge)", pinNum);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Log wrist tilt interrupt count periodically
+void WordyWatch::logWristTiltInterrupts()
+{
+    if (!Raft::isTimeout(millis(), _wristTiltIntLastLogMs, WRIST_TILT_INT_LOG_INTERVAL_MS))
+        return;
+    _wristTiltIntLastLogMs = millis();
+
+    uint32_t count = _wristTiltIntCount;
+    uint32_t delta = count - _wristTiltIntLastLoggedCount;
+    _wristTiltIntLastLoggedCount = count;
+
+    // Read GPIO level BEFORE any I2C reads
+    int pinBefore = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+    // Calculate time from last diagnostic read to ISR
+    int64_t isrTimeUs = _wristTiltIntLastIsrTimeUs;
+    int64_t timeSinceLastDiagUs = isrTimeUs - _wristTiltIntLastDiagTimeUs;
+
+    LOG_I(MODULE_PREFIX, "wristTiltInt: count=%lu delta=%lu pinBefore=%d isrAfterDiag=%lldus",
+          (unsigned long)count, (unsigned long)delta, pinBefore, timeSinceLastDiagUs);
+
+    // Poll accelerometer status registers for diagnostics (this clears IMU latch)
+    _accelerometer.debugPollStatus();
+
+    // Read GPIO level AFTER IMU register reads (latch should be released if IMU was source)
+    int pinAfterImu = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+    // Read RTC status register to check if RTC is asserting INT#
+    uint8_t rtcStatus = 0xFF;
+    _rtc.readStatusRegister(rtcStatus);
+
+    // Read GPIO level AFTER RTC status read
+    int pinAfterRtc = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+    LOG_I(MODULE_PREFIX, "wristTiltInt: pinAfterImu=%d pinAfterRtc=%d rtcStatus=0x%02x",
+          pinAfterImu, pinAfterRtc, rtcStatus);
+
+    // Record when we finished diagnostic reads (for next ISR timing comparison)
+    _wristTiltIntLastDiagTimeUs = esp_timer_get_time();
+}
+#endif
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // /// @brief Check wakeup button press state

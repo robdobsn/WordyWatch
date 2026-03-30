@@ -83,24 +83,84 @@ public:
             return false;
         }
 
-        // Initialization sequence for LSM6DS with wrist tilt detection
-        // 0x1018 (26Hz ODR, ±2g), 0x1100 (Gyro OFF), 0x1260 (open-drain INT, active low),
-        // 0x5880 (enable embedded functions), 0x1980 (enable wrist tilt),
-        // 0x5F00 (INT2 disabled for testing)
+        // Read WHO_AM_I register to identify chip variant
+        uint8_t whoAmIReg = 0x0F;
+        uint8_t whoAmI = 0;
+        esp_err_t err = i2c_master_transmit_receive(_devHandle, &whoAmIReg, 1, &whoAmI, 1, 1000);
+        if (err == ESP_OK)
+        {
+            LOG_I(MODULE_PREFIX, "init: WHO_AM_I = 0x%02x (%s)", whoAmI,
+                  whoAmI == 0x69 ? "LSM6DS3/DS33" :
+                  whoAmI == 0x6A ? "LSM6DS3TR-C/DSM/DSL" :
+                  whoAmI == 0x6C ? "LSM6DSOX" : "unknown");
+        }
+        else
+        {
+            LOG_W(MODULE_PREFIX, "init: Failed to read WHO_AM_I: %s", esp_err_to_name(err));
+        }
+
+        // Software reset to clear all stale register state from previous boots
+        // (IMU stays powered across ESP soft resets)
+        {
+            uint8_t swReset[] = {0x12, 0x01};  // CTRL3_C: SW_RESET (bit0)
+            i2c_master_transmit(_devHandle, swReset, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(50));  // Wait for reset to complete
+            LOG_I(MODULE_PREFIX, "init: Software reset complete");
+        }
+
+        // Initialization sequence for LSM6DS interrupt configuration
+        // Two modes available:
+        //   DEBUG_USE_MOTION_WAKEUP_INT: simple motion wake-up interrupt (easy to trigger for debugging)
+        //   Default: wrist tilt interrupt (requires embedded function support, LSM6DSM/DSOX only)
         struct RegValue
         {
             uint8_t reg;
             uint8_t value;
         };
-        
+
+#ifdef DEBUG_USE_MOTION_WAKEUP_INT
+        // Motion wake-up interrupt - fires on any acceleration change exceeding threshold
+        // Works on all LSM6DS variants (DS3, DSM, DSOX). Easy to trigger by moving the device.
         const RegValue initSequence[] = {
-            {0x10, 0x18},  // CTRL1_XL: 26Hz ODR, ±2g
+            {0x10, 0x20},  // CTRL1_XL: 26Hz ODR, ±2g (ODR=0010, FS=00)
             {0x11, 0x00},  // CTRL2_G: Gyro OFF
-            {0x12, 0x60},  // CTRL3_C: open-drain INT (bit 6=1), active low (bit 5=1)
-            {0x58, 0x80},  // TAP_CFG0: enable embedded functions
-            {0x19, 0x80},  // CTRL10_C: enable wrist tilt
-            {0x5F, 0x00}   // MD2_CFG: INT2 disabled for testing
+            {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
+            {0x5B, 0x02},  // WAKE_UP_THS: low threshold (~63mg at ±2g, 2*FS/64)
+            {0x5C, 0x00},  // WAKE_UP_DUR: no duration requirement
+            {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7)
+            {0x5F, 0x20}   // MD2_CFG: INT2_WU (bit5), route wake-up to INT2
         };
+        LOG_I(MODULE_PREFIX, "init: Using motion wake-up interrupt mode (DEBUG)");
+#elif defined(DEBUG_USE_BASIC_TILT_INT)
+        // Basic tilt interrupt for LSM6DS3TR-C — tests embedded function engine
+        // Uses tilt_en (bit3) in CTRL10_C + func_en (bit2), routed via MD2_CFG int2_tilt (bit1)
+        // Triggers on ~35° tilt change. Simpler than wrist tilt.
+        const RegValue initSequence[] = {
+            {0x10, 0x20},  // CTRL1_XL: 26Hz ODR, ±2g (minimum 26Hz needed for tilt)
+            {0x11, 0x00},  // CTRL2_G: Gyro OFF
+            {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
+            {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7) - master enable for interrupts
+            {0x19, 0x0C},  // CTRL10_C: tilt_en (bit3) + func_en (bit2) - enable embedded tilt
+            {0x5F, 0x02}   // MD2_CFG: INT2_TILT (bit1) - route tilt to INT2
+        };
+        LOG_I(MODULE_PREFIX, "init: Using basic tilt interrupt mode (DEBUG)");
+#else
+        // Wrist tilt interrupt for LSM6DS3TR-C
+        // CTRL10_C: func_en (bit2) MUST be set for embedded functions engine to run,
+        //   plus wrist_tilt_en (bit7) to enable wrist tilt detection
+        // INT2 routing for wrist tilt is via DRDY_PULSE_CFG_G (0x0B) bit0 (int2_wrist_tilt),
+        //   NOT via MD2_CFG int2_tilt (that's for basic tilt only)
+        const RegValue initSequence[] = {
+            {0x10, 0x60},  // CTRL1_XL: 104Hz ODR, ±2g (ODR=0100, FS=00) — higher ODR for wrist tilt
+            {0x11, 0x00},  // CTRL2_G: Gyro OFF
+            {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
+            {0x0E, 0x00},  // INT2_CTRL: clear all DRDY/FIFO routing on INT2
+            {0x5F, 0x00},  // MD2_CFG: clear all routing
+            {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7), no LIR (wrist tilt is always pulsed)
+            {0x19, 0x84},  // CTRL10_C: wrist_tilt_en (bit7) + func_en (bit2) - enable embedded functions
+            {0x0B, 0x01}   // DRDY_PULSE_CFG_G: int2_wrist_tilt (bit0) - route wrist tilt to INT2
+        };
+#endif
 
         // Write each register
         for (size_t i = 0; i < sizeof(initSequence) / sizeof(initSequence[0]); i++)
@@ -119,6 +179,80 @@ public:
         }
 
         LOG_I(MODULE_PREFIX, "init: Configured LSM6DS for wrist tilt detection at address 0x%02X", _i2cAddr);
+
+        // Read back all written registers to verify writes took effect
+        for (size_t i = 0; i < sizeof(initSequence) / sizeof(initSequence[0]); i++)
+        {
+            uint8_t reg = initSequence[i].reg;
+            uint8_t readVal = 0;
+            esp_err_t err = i2c_master_transmit_receive(_devHandle, &reg, 1, &readVal, 1, 1000);
+            if (err == ESP_OK)
+            {
+                LOG_I(MODULE_PREFIX, "init: verify reg 0x%02x wrote=0x%02x read=0x%02x %s",
+                      reg, initSequence[i].value, readVal,
+                      (readVal == initSequence[i].value) ? "OK" : "MISMATCH");
+            }
+            else
+            {
+                LOG_W(MODULE_PREFIX, "init: verify reg 0x%02x read failed: %s", reg, esp_err_to_name(err));
+            }
+        }
+
+#if !defined(DEBUG_USE_MOTION_WAKEUP_INT) && !defined(DEBUG_USE_BASIC_TILT_INT)
+        // Access embedded function BANK B to read/configure wrist tilt parameters
+        // FUNC_CFG_ACCESS (0x01): func_cfg_en is bits [7:5]
+        //   USER_BANK=0x00, BANK_A=0x80, BANK_B=0xA0
+        {
+            uint8_t bankB[] = {0x01, 0xA0};  // FUNC_CFG_ACCESS: BANK_B (bits 7:5 = 101)
+            i2c_master_transmit(_devHandle, bankB, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(5));
+
+            // Read current wrist tilt config registers in BANK B
+            const uint8_t bankBRegs[] = {0x50, 0x54, 0x59};  // A_WRIST_TILT_LAT, A_WRIST_TILT_THS, A_WRIST_TILT_MASK
+            const char* bankBNames[] = {"TILT_LAT", "TILT_THS", "TILT_MASK"};
+            for (size_t i = 0; i < sizeof(bankBRegs); i++)
+            {
+                uint8_t reg = bankBRegs[i];
+                uint8_t val = 0;
+                err = i2c_master_transmit_receive(_devHandle, &reg, 1, &val, 1, 1000);
+                LOG_I(MODULE_PREFIX, "init: BANK_B defaults reg 0x%02x (%s) = 0x%02x", reg, bankBNames[i], val);
+            }
+
+            // Configure wrist tilt with ST recommended default parameters
+            // A_WRIST_TILT_LAT (0x50): latency, 1 LSB = 40ms, default 0x0F (600ms)
+            //   Use default — filters out brief bumps, requires deliberate gesture
+            uint8_t latency[] = {0x50, 0x0F};
+            i2c_master_transmit(_devHandle, latency, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(5));
+
+            // A_WRIST_TILT_THS (0x54): threshold, 1 LSB = 15.625mg, default 0x20 (500mg)
+            //   Use default — good balance for wrist raise detection
+            uint8_t threshold[] = {0x54, 0x20};
+            i2c_master_transmit(_devHandle, threshold, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(5));
+
+            // A_WRIST_TILT_MASK (0x59): axis direction enable mask
+            //   Bits [7:2]: zpos, zneg, ypos, yneg, xpos, xneg
+            //   Set to 0xFC to enable ALL directions
+            uint8_t mask[] = {0x59, 0xFC};
+            i2c_master_transmit(_devHandle, mask, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(5));
+
+            // Read back to verify
+            for (size_t i = 0; i < sizeof(bankBRegs); i++)
+            {
+                uint8_t reg = bankBRegs[i];
+                uint8_t val = 0;
+                i2c_master_transmit_receive(_devHandle, &reg, 1, &val, 1, 1000);
+                LOG_I(MODULE_PREFIX, "init: BANK_B configured reg 0x%02x (%s) = 0x%02x", reg, bankBNames[i], val);
+            }
+
+            // Switch back to USER BANK
+            uint8_t userBank[] = {0x01, 0x00};
+            i2c_master_transmit(_devHandle, userBank, 2, 1000);
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+#endif
         
         // Clear any pending interrupts
         clearInterrupt();
@@ -135,11 +269,14 @@ public:
         }
 
         // Read status registers to clear interrupts
-        // For LSM6DS with wrist tilt, we need to read:
+        // For LSM6DS3TR-C with wrist tilt, we need to read:
         // - 0x1A (ALL_INT_SRC) - All interrupt source register
         // - 0x1D (WAKE_UP_SRC) - Wake-up interrupt source
         // - 0x1C (TAP_SRC) - Tap source (may include tilt status)
-        const uint8_t statusRegs[] = {0x1A, 0x1D, 0x1C};
+        // - 0x53 (FUNC_SRC1) - Embedded function source (tilt_ia in bit5)
+        // - 0x54 (FUNC_SRC2) - Embedded function source 2 (wrist_tilt_ia in bit0)
+        // - 0x55 (WRIST_TILT_IA) - Wrist tilt direction flags
+        const uint8_t statusRegs[] = {0x1A, 0x1D, 0x1C, 0x53, 0x54, 0x55};
         
         for (size_t i = 0; i < sizeof(statusRegs); i++)
         {
@@ -158,6 +295,41 @@ public:
             }
         }
     }
+
+#ifdef DEBUG_WRIST_TILT_INT
+    /// @brief Read accelerometer data and interrupt status for diagnostics
+    void debugPollStatus()
+    {
+        if (!_devHandle)
+            return;
+
+        // Read acceleration data (OUTX_L_XL=0x28, 6 bytes for X,Y,Z each 16-bit)
+        uint8_t accelReg = 0x28;
+        uint8_t accelData[6] = {};
+        esp_err_t err = i2c_master_transmit_receive(_devHandle, &accelReg, 1, accelData, 6, 1000);
+        int16_t ax = 0, ay = 0, az = 0;
+        if (err == ESP_OK)
+        {
+            ax = (int16_t)(accelData[0] | (accelData[1] << 8));
+            ay = (int16_t)(accelData[2] | (accelData[3] << 8));
+            az = (int16_t)(accelData[4] | (accelData[5] << 8));
+        }
+
+        // Read interrupt/status registers
+        // STATUS_REG (0x1E), ALL_INT_SRC (0x1A), FUNC_SRC1 (0x53), FUNC_SRC2 (0x54), WRIST_TILT_IA (0x55),
+        // CTRL10_C (0x19), DRDY_PULSE_CFG_G (0x0B), INT2_CTRL (0x0E), MD2_CFG (0x5F), TAP_CFG (0x58)
+        const uint8_t diagRegs[] = {0x1E, 0x1A, 0x53, 0x54, 0x55, 0x19, 0x0B, 0x0E, 0x5F, 0x58};
+        uint8_t diagVals[sizeof(diagRegs)] = {};
+        for (size_t i = 0; i < sizeof(diagRegs); i++)
+        {
+            uint8_t reg = diagRegs[i];
+            i2c_master_transmit_receive(_devHandle, &reg, 1, &diagVals[i], 1, 1000);
+        }
+
+        LOG_I(MODULE_PREFIX, "diag: ax=%d ay=%d az=%d STATUS=0x%02x ALL_INT=0x%02x FUNC1=0x%02x FUNC2=0x%02x WRIST_IA=0x%02x CTRL10=0x%02x DRDY_CFG=0x%02x INT2_CTRL=0x%02x MD2_CFG=0x%02x TAP_CFG=0x%02x",
+              ax, ay, az, diagVals[0], diagVals[1], diagVals[2], diagVals[3], diagVals[4], diagVals[5], diagVals[6], diagVals[7], diagVals[8], diagVals[9]);
+    }
+#endif
 
     /// @brief Remove device from I2C bus and cleanup
     void deinit()

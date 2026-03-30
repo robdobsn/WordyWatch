@@ -279,6 +279,56 @@ public:
         }
     }
 
+    /// @brief Disable all RTC interrupt sources and clear pending flags (RV-3028-C7)
+    /// Call this during init to prevent INT# from firing due to stale config
+    void disableInterrupts()
+    {
+        if (!_devHandle || _deviceType != RTCDeviceType::RV3028C7)
+            return;
+
+        // Read current status and control registers for diagnostics
+        uint8_t statusReg = 0, ctrl1Reg = 0, ctrl2Reg = 0;
+        uint8_t timerVal0 = 0, timerVal1 = 0;
+        readRegister(0x0E, statusReg);
+        readRegister(0x0F, ctrl1Reg);
+        readRegister(0x10, ctrl2Reg);
+        readRegister(0x0B, timerVal0);
+        readRegister(0x0C, timerVal1);
+
+        LOG_I(MODULE_PREFIX, "init: RTC regs Status=0x%02x Ctrl1=0x%02x Ctrl2=0x%02x TimerVal=0x%02x%02x",
+              statusReg, ctrl1Reg, ctrl2Reg, timerVal1, timerVal0);
+
+        // Disable all interrupt enables in Control 2 (TIE, AIE, EIE, UIE, CLKIE)
+        // Keep 12/24 bit as-is, clear everything else
+        uint8_t ctrl2_write[] = {0x10, 0x00};
+        i2c_master_transmit(_devHandle, ctrl2_write, sizeof(ctrl2_write), 1000);
+
+        // Disable timer in Control 1 (clear TE bit)
+        uint8_t ctrl1_write[] = {0x0F, (uint8_t)(ctrl1Reg & ~0x04)};
+        i2c_master_transmit(_devHandle, ctrl1_write, sizeof(ctrl1_write), 1000);
+
+        // Clear all status flags (write 0 to clear)
+        uint8_t status_write[] = {0x0E, 0x00};
+        i2c_master_transmit(_devHandle, status_write, sizeof(status_write), 1000);
+
+        // Read back to confirm
+        readRegister(0x0E, statusReg);
+        readRegister(0x0F, ctrl1Reg);
+        readRegister(0x10, ctrl2Reg);
+        LOG_I(MODULE_PREFIX, "init: RTC after disable ints: Status=0x%02x Ctrl1=0x%02x Ctrl2=0x%02x",
+              statusReg, ctrl1Reg, ctrl2Reg);
+    }
+
+    /// @brief Read RTC Status register (0x0E) for interrupt source detection
+    /// @param status Output status byte
+    /// @return True if read succeeded
+    bool readStatusRegister(uint8_t& status)
+    {
+        if (!_devHandle)
+            return false;
+        return readRegister(0x0E, status);
+    }
+
     /// @brief Check if RTC is initialized
     /// @return True if initialized
     bool isInitialized() const
@@ -294,6 +344,11 @@ public:
     }
 
 private:
+    /// @brief Read a single register
+    bool readRegister(uint8_t reg, uint8_t& value)
+    {
+        return i2c_master_transmit_receive(_devHandle, &reg, 1, &value, 1, 1000) == ESP_OK;
+    }
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
     RTCDeviceType _deviceType;                  // Device type

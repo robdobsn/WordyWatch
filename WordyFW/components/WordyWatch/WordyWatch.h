@@ -11,10 +11,22 @@
 #include <stdint.h>
 #include "SimpleMovingAverage.h"
 #include "RaftSysMod.h"
+
+// Debug: install GPIO ISR on wake pin to count wrist-tilt interrupts
+#define DEBUG_WRIST_TILT_INT
+
+// Debug: use simple motion wake-up interrupt instead of wrist tilt (easier to trigger)
+// #define DEBUG_USE_MOTION_WAKEUP_INT
+
+// Use basic tilt interrupt (embedded function, ~35° change) instead of wrist tilt
+// Wrist tilt INT2 output generates constant periodic pulses (~0.8Hz) regardless of motion
+#define DEBUG_USE_BASIC_TILT_INT
+
 #include "Accelerometer.h"
 #include "RTC.h"
 #include "PowerAndSleep.h"
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
 
 class RaftJsonIF;
 class APISourceInfo;
@@ -85,6 +97,20 @@ private:
     
     // RTC
     RTC _rtc;
+
+#ifdef DEBUG_WRIST_TILT_INT
+    // Wrist tilt interrupt debugging
+    int _wristTiltIntPin = -1;
+    static volatile uint32_t _wristTiltIntCount;
+    static volatile int64_t _wristTiltIntLastIsrTimeUs;
+    int64_t _wristTiltIntLastDiagTimeUs = 0;
+    uint32_t _wristTiltIntLastLogMs = 0;
+    uint32_t _wristTiltIntLastLoggedCount = 0;
+    static constexpr uint32_t WRIST_TILT_INT_LOG_INTERVAL_MS = 5000;
+    static void IRAM_ATTR wristTiltISR(void* arg);
+    void setupWristTiltInterrupt(int pinNum);
+    void logWristTiltInterrupts();
+#endif
     
     // Helpers
     void clearDisplay();
