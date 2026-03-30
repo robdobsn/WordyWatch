@@ -136,7 +136,7 @@ public:
         // Uses tilt_en (bit3) in CTRL10_C + func_en (bit2), routed via MD2_CFG int2_tilt (bit1)
         // Triggers on ~35° tilt change. Simpler than wrist tilt.
         const RegValue initSequence[] = {
-            {0x10, 0x20},  // CTRL1_XL: 26Hz ODR, ±2g (minimum 26Hz needed for tilt)
+            {0x10, 0x40},  // CTRL1_XL: 104Hz ODR, ±2g (higher ODR for better tilt sensitivity)
             {0x11, 0x00},  // CTRL2_G: Gyro OFF
             {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
             {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7) - master enable for interrupts
