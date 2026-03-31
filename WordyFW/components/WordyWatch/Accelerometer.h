@@ -260,6 +260,35 @@ public:
         return true;
     }
 
+    /// @brief Read tilt interrupt status without clearing other registers
+    /// @param tiltDetected Set to true if tilt_ia (basic tilt) or wrist_tilt_ia was flagged
+    /// @return true if registers were read successfully
+    bool readTiltStatus(bool& tiltDetected)
+    {
+        tiltDetected = false;
+        if (!_devHandle)
+            return false;
+
+        // FUNC_SRC1 (0x53): bit5 = tilt_ia (basic tilt)
+        uint8_t reg = 0x53;
+        uint8_t funcSrc1 = 0;
+        esp_err_t err = i2c_master_transmit_receive(_devHandle, &reg, 1, &funcSrc1, 1, 1000);
+        if (err != ESP_OK)
+            return false;
+
+        // FUNC_SRC2 (0x54): bit0 = wrist_tilt_ia
+        reg = 0x54;
+        uint8_t funcSrc2 = 0;
+        err = i2c_master_transmit_receive(_devHandle, &reg, 1, &funcSrc2, 1, 1000);
+        if (err != ESP_OK)
+            return false;
+
+        tiltDetected = ((funcSrc1 & 0x20) != 0) || ((funcSrc2 & 0x01) != 0);
+        LOG_I(MODULE_PREFIX, "readTiltStatus: FUNC_SRC1=0x%02x FUNC_SRC2=0x%02x tilt=%s",
+              funcSrc1, funcSrc2, tiltDetected ? "YES" : "no");
+        return true;
+    }
+
     /// @brief Clear accelerometer interrupt by reading status registers
     void clearInterrupt()
     {

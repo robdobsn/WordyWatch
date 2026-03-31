@@ -228,9 +228,50 @@ void WordyWatch::checkWakeupReason()
 {
     // Get wakeup reason
     esp_sleep_wakeup_cause_t wakeupReason = esp_sleep_get_wakeup_cause();
-// #ifdef DEBUG_SLEEP_WAKEUP
-    LOG_I(MODULE_PREFIX, "checkWakeupReason woke up, reason %d", wakeupReason);
-// #endif
+
+    const char* wakeupSource = "unknown";
+    switch (wakeupReason)
+    {
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+            wakeupSource = "power-on (not from sleep)";
+            break;
+        case ESP_SLEEP_WAKEUP_EXT1:
+        {
+            // EXT1 wakeup on GPIO 5 (shared line) - determine which device triggered it
+            wakeupSource = "EXT1 GPIO";
+
+            // Check if the button is pressed (VSENSE above threshold)
+            bool buttonPressed = _powerAndSleep.isPowerButtonPressed();
+
+            // Check if the IMU flagged a tilt event
+            bool tiltDetected = false;
+            _accelerometer.readTiltStatus(tiltDetected);
+
+            // Check RTC status for alarm/timer flags
+            uint8_t rtcStatus = 0;
+            _rtc.readStatusRegister(rtcStatus);
+
+            if (buttonPressed)
+                wakeupSource = "button press";
+            else if (tiltDetected)
+                wakeupSource = "wrist tilt";
+            else if (rtcStatus & 0x03)  // AF or TF flags
+                wakeupSource = "RTC alarm/timer";
+            else
+                wakeupSource = "EXT1 (source unclear)";
+
+            LOG_I(MODULE_PREFIX, "checkWakeupReason EXT1 detail: button=%s tilt=%s rtcStatus=0x%02x",
+                  buttonPressed ? "YES" : "no", tiltDetected ? "YES" : "no", rtcStatus);
+            break;
+        }
+        case ESP_SLEEP_WAKEUP_TIMER:
+            wakeupSource = "timer";
+            break;
+        default:
+            break;
+    }
+
+    LOG_I(MODULE_PREFIX, "checkWakeupReason: %s (reason %d)", wakeupSource, wakeupReason);
 }
 
 #ifdef DEBUG_WRIST_TILT_INT
