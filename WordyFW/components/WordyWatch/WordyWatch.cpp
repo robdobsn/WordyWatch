@@ -123,6 +123,19 @@ void WordyWatch::setup()
     // Get minute resolution
     _minuteResolution = config.getLong("minuteResolution", 5);
 
+    auto clampByte = [](long value) {
+        if (value < 0)
+            return static_cast<uint8_t>(0);
+        if (value > 0xFF)
+            return static_cast<uint8_t>(0xFF);
+        return static_cast<uint8_t>(value);
+    };
+
+    uint8_t wristLatency = clampByte(config.getLong("WristTilt/latency", 8));
+    uint8_t wristThreshold = clampByte(config.getLong("WristTilt/threshold", 16));
+    uint8_t wristMask = clampByte(config.getLong("WristTilt/mask", 0xFC));
+    _accelerometer.setWristTiltConfig(wristLatency, wristThreshold, wristMask);
+
     // Get I2C configuration
     pinName = config.getString("i2cSdaPin", "");
     _i2cSdaPin = ConfigPinMap::getPinFromName(pinName.c_str());

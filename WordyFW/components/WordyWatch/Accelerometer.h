@@ -24,7 +24,7 @@
 
 // Use basic tilt interrupt (embedded function, ~35deg change) instead of wrist tilt
 // Wrist tilt INT2 output generates constant periodic pulses (~0.8Hz) regardless of motion
-#define DEBUG_USE_BASIC_TILT_INT
+// #define DEBUG_USE_BASIC_TILT_INT
 
 class Accelerometer
 {
@@ -55,6 +55,17 @@ public:
     void setI2CAddress(uint8_t addr)
     {
         _i2cAddr = addr;
+    }
+
+    /// @brief Set wrist tilt sensitivity config (BANK_B)
+    /// @param latency Latency in 40ms units
+    /// @param threshold Threshold in 15.625mg units
+    /// @param mask Axis direction mask bits [7:2]
+    void setWristTiltConfig(uint8_t latency, uint8_t threshold, uint8_t mask)
+    {
+        _wristTiltLatency = latency;
+        _wristTiltThreshold = threshold;
+        _wristTiltMask = mask;
     }
 
     /// @brief Add accelerometer device to I2C bus
@@ -149,7 +160,7 @@ public:
         // Uses tilt_en (bit3) in CTRL10_C + func_en (bit2), routed via MD2_CFG int2_tilt (bit1)
         // Triggers on ~35° tilt change. Simpler than wrist tilt.
         const RegValue initSequence[] = {
-            {0x10, 0x40},  // CTRL1_XL: 104Hz ODR, ±2g (higher ODR for better tilt sensitivity)
+            {0x10, 0x50},  // CTRL1_XL: 208Hz ODR, ±2g (higher ODR for better tilt sensitivity)
             {0x11, 0x00},  // CTRL2_G: Gyro OFF
             {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
             {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7) - master enable for interrupts
@@ -234,20 +245,20 @@ public:
             // Configure wrist tilt with ST recommended default parameters
             // A_WRIST_TILT_LAT (0x50): latency, 1 LSB = 40ms, default 0x0F (600ms)
             //   Use default — filters out brief bumps, requires deliberate gesture
-            uint8_t latency[] = {0x50, 0x0F};
+            uint8_t latency[] = {0x50, _wristTiltLatency};
             i2c_master_transmit(_devHandle, latency, 2, 1000);
             vTaskDelay(pdMS_TO_TICKS(5));
 
             // A_WRIST_TILT_THS (0x54): threshold, 1 LSB = 15.625mg, default 0x20 (500mg)
             //   Use default — good balance for wrist raise detection
-            uint8_t threshold[] = {0x54, 0x20};
+            uint8_t threshold[] = {0x54, _wristTiltThreshold};
             i2c_master_transmit(_devHandle, threshold, 2, 1000);
             vTaskDelay(pdMS_TO_TICKS(5));
 
             // A_WRIST_TILT_MASK (0x59): axis direction enable mask
             //   Bits [7:2]: zpos, zneg, ypos, yneg, xpos, xneg
             //   Set to 0xFC to enable ALL directions
-            uint8_t mask[] = {0x59, 0xFC};
+            uint8_t mask[] = {0x59, _wristTiltMask};
             i2c_master_transmit(_devHandle, mask, 2, 1000);
             vTaskDelay(pdMS_TO_TICKS(5));
 
@@ -488,6 +499,11 @@ public:
 private:
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
+
+    // Wrist tilt sensitivity config (BANK_B)
+    uint8_t _wristTiltLatency = 0x08;
+    uint8_t _wristTiltThreshold = 0x10;
+    uint8_t _wristTiltMask = 0xFC;
 
 #ifdef DEBUG_WRIST_TILT_INT
     int _wristTiltIntPin = -1;

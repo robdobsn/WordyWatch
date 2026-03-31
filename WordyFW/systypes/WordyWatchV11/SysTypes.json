@@ -194,6 +194,11 @@
     "accelI2CAddr": "0x6a",
     "rtcI2CAddr": "0x52",
     "rtcDevType": "RV-3028-C7",
+    "WristTilt": {
+      "latency": 4,
+      "threshold": 8,
+      "mask": 252
+    },
     "minuteResolution": 5,
     "longPressMs": 2000,
     "adcCalib": {

@@ -217,34 +217,6 @@ public:
         esp_light_sleep_start();
     }
     
-    /// @brief Enter light sleep with timer wakeup
-    /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
-    void enterLightSleep(int wakeupMs)
-    {
-#ifdef FEATURE_POWER_CONTROL_ENABLE_SLEEP
-        // Check for wakeup time
-        if (wakeupMs < 0)
-        {
-#ifdef DEBUG_SLEEP_AND_WAKEUP
-            LOG_I(MODULE_PREFIX, "Entering untimed light sleep");
-#endif
-        }
-        else
-        {
-            // Convert ms to microseconds
-            const uint64_t wakeup_time_us = wakeupMs * 1000; 
-            esp_sleep_enable_timer_wakeup(wakeup_time_us);
-#ifdef DEBUG_SLEEP_AND_WAKEUP
-            LOG_I(MODULE_PREFIX, "Entering light sleep for %dms", wakeupMs);
-#endif
-        }
-
-        // Start light sleep
-        esp_light_sleep_start();
-
-#endif
-    }
-    
     /// @brief Enter deep sleep with timer wakeup
     /// @param wakeupMs Wakeup time in milliseconds (-1 for no timer wakeup)
     /// @note Power control pin will be held HIGH during deep sleep
