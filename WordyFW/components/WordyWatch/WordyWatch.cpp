@@ -17,55 +17,28 @@
 #include "driver/rtc_io.h"
 #include "driver/i2c_master.h"
 #include "SysManager.h"
-#include "DeviceManager.h"
 #include "APISourceInfo.h"
 #include "RestAPIEndpointManager.h"
-#include "wordclock_patterns.h"
 #include <time.h>
 #include <sys/time.h>
 
 // Debug control - uncomment to enable specific debugging
 #define DEBUG_LOOP_STATE_MACHINE
-#define DEBUG_TIME_DISPLAY
 
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "WordyWatch";
-
-    const led_pattern_t* getPatternForTime(int hour, int minute)
-    {
-        if (hour < 0 || minute < 0)
-            return nullptr;
-
-        hour = hour % 24;
-        minute = (minute / LED_MINUTE_GRANULARITY) * LED_MINUTE_GRANULARITY;
-        if (minute >= 60)
-            minute = 0;
-
-        for (const auto& pattern : led_patterns)
-        {
-            if (pattern.hour == hour && pattern.minute == minute)
-            {
-                return &pattern;
-            }
-        }
-
-        return nullptr;
-    }
+    static constexpr const char* SETTINGS_NAMESPACE = "WordyWatchSettings";
 }
-
-#ifdef DEBUG_WRIST_TILT_INT
-// Static members for ISR access
-volatile uint32_t WordyWatch::_wristTiltIntCount = 0;
-volatile int64_t WordyWatch::_wristTiltIntLastIsrTimeUs = 0;
-#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Constructor for WordyWatch
 /// @param pModuleName Module name
 /// @param sysConfig System configuration interface
 WordyWatch::WordyWatch(const char *pModuleName, RaftJsonIF& sysConfig)
-    : RaftSysMod(pModuleName, sysConfig)
+    : RaftSysMod(pModuleName, sysConfig),
+    _display(*this),
+    _settingsNVS(SETTINGS_NAMESPACE)
 {
 }
 
@@ -129,6 +102,24 @@ void WordyWatch::setup()
     // Get sleep configuration
     _showTimeForMs = config.getLong("showTimeForMs", 10000);
 
+    // Override with persisted settings if present
+    long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
+    if (persistedShowTimeMs >= 0)
+    {
+        _showTimeForMs = static_cast<uint32_t>(persistedShowTimeMs);
+    }
+    else
+    {
+        long persistedShowSecs = _settingsNVS.getLong("showsecs", -1);
+        if (persistedShowSecs >= 0)
+        {
+            uint64_t showTimeMs = static_cast<uint64_t>(persistedShowSecs) * 1000ULL;
+            if (showTimeMs > UINT32_MAX)
+                showTimeMs = UINT32_MAX;
+            _showTimeForMs = static_cast<uint32_t>(showTimeMs);
+        }
+    }
+
     // Get minute resolution
     _minuteResolution = config.getLong("minuteResolution", 5);
 
@@ -161,7 +152,7 @@ void WordyWatch::setup()
 
 #ifdef DEBUG_WRIST_TILT_INT
     // Install GPIO ISR to count wrist tilt interrupts on wake pin
-    setupWristTiltInterrupt(wakePinNum);
+    _accelerometer.setupWristTiltInterrupt(wakePinNum);
 #endif
 
     // Debug - do initial power reading
@@ -182,7 +173,7 @@ void WordyWatch::loop()
 {
 #ifdef DEBUG_WRIST_TILT_INT
     // Periodically log wrist tilt interrupt count
-    logWristTiltInterrupts();
+    _accelerometer.logWristTiltInterrupts(_rtc);
 #endif
 
     // Update power management in all states - returns true if shutdown required
@@ -199,7 +190,7 @@ void WordyWatch::loop()
         case INITIAL_STATE:
             // Initial state - go to displaying time
             LOG_I(MODULE_PREFIX, "loop initial state, going to display time");
-            showTimeOnDisplay();
+            _display.showTime(_rtc);
             setState(DISPLAYING_TIME);
             return;
         case DISPLAYING_TIME:
@@ -215,7 +206,7 @@ void WordyWatch::loop()
             break;
 
         case PREPARING_TO_SLEEP:
-            clearDisplay();
+            _display.clear();
             setState(SLEEPING);
             return;
 
@@ -228,13 +219,13 @@ void WordyWatch::loop()
 
         case WOKEN_UP:
             // Check wakeup reason
-            checkWakeupReason();
+            _powerAndSleep.checkWakeupReason(_accelerometer, _rtc);
             _timeLastWokenMs = millis();
             setState(DISPLAYING_TIME);
             return;
         case SHUTDOWN_REQUESTED:
             // Clear the display
-            clearDisplay();
+            _display.clear();
             _powerAndSleep.shutdown();
             setState(SHUTTING_DOWN);
             return;
@@ -243,156 +234,6 @@ void WordyWatch::loop()
             return;
     }
 }
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Check reason for wakeup from sleep
-void WordyWatch::checkWakeupReason()
-{
-    // Get wakeup reason
-    esp_sleep_wakeup_cause_t wakeupReason = esp_sleep_get_wakeup_cause();
-
-    const char* wakeupSource = "unknown";
-    switch (wakeupReason)
-    {
-        case ESP_SLEEP_WAKEUP_UNDEFINED:
-            wakeupSource = "power-on (not from sleep)";
-            break;
-        case ESP_SLEEP_WAKEUP_EXT1:
-        {
-            // EXT1 wakeup on GPIO 5 (shared line) - determine which device triggered it
-            wakeupSource = "EXT1 GPIO";
-
-            // Check if the button is pressed (VSENSE above threshold)
-            bool buttonPressed = _powerAndSleep.isPowerButtonPressed();
-
-            // Check if the IMU flagged a tilt event
-            bool tiltDetected = false;
-            _accelerometer.readTiltStatus(tiltDetected);
-
-            // Check RTC status for alarm/timer flags
-            uint8_t rtcStatus = 0;
-            _rtc.readStatusRegister(rtcStatus);
-
-            if (buttonPressed)
-                wakeupSource = "button press";
-            else if (tiltDetected)
-                wakeupSource = "wrist tilt";
-            else if (rtcStatus & 0x03)  // AF or TF flags
-                wakeupSource = "RTC alarm/timer";
-            else
-                wakeupSource = "EXT1 (source unclear)";
-
-            LOG_I(MODULE_PREFIX, "checkWakeupReason EXT1 detail: button=%s tilt=%s rtcStatus=0x%02x",
-                  buttonPressed ? "YES" : "no", tiltDetected ? "YES" : "no", rtcStatus);
-            break;
-        }
-        case ESP_SLEEP_WAKEUP_TIMER:
-            wakeupSource = "timer";
-            break;
-        default:
-            break;
-    }
-
-    LOG_I(MODULE_PREFIX, "checkWakeupReason: %s (reason %d)", wakeupSource, wakeupReason);
-}
-
-#ifdef DEBUG_WRIST_TILT_INT
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief ISR for wrist tilt interrupt (falling edge on shared INT line)
-void IRAM_ATTR WordyWatch::wristTiltISR(void* arg)
-{
-    _wristTiltIntCount = _wristTiltIntCount + 1;
-    _wristTiltIntLastIsrTimeUs = esp_timer_get_time();
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Setup GPIO ISR on wake pin to count wrist tilt interrupts
-/// @param pinNum GPIO pin number for the interrupt
-void WordyWatch::setupWristTiltInterrupt(int pinNum)
-{
-    if (pinNum < 0)
-    {
-        LOG_W(MODULE_PREFIX, "setupWristTiltInterrupt: no wake pin configured");
-        return;
-    }
-
-    _wristTiltIntPin = pinNum;
-    _wristTiltIntCount = 0;
-
-    // Configure GPIO for falling edge interrupt (active-low, open-drain with pull-up)
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_NEGEDGE;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << pinNum);
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    esp_err_t err = gpio_config(&io_conf);
-    if (err != ESP_OK)
-    {
-        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_config failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // Install ISR service and add handler
-    err = gpio_install_isr_service(0);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
-    {
-        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_install_isr_service failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    err = gpio_isr_handler_add((gpio_num_t)pinNum, wristTiltISR, nullptr);
-    if (err != ESP_OK)
-    {
-        LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_isr_handler_add failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    LOG_I(MODULE_PREFIX, "setupWristTiltInterrupt: ISR installed on GPIO %d (falling edge)", pinNum);
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Log wrist tilt interrupt count periodically
-void WordyWatch::logWristTiltInterrupts()
-{
-    if (!Raft::isTimeout(millis(), _wristTiltIntLastLogMs, WRIST_TILT_INT_LOG_INTERVAL_MS))
-        return;
-    _wristTiltIntLastLogMs = millis();
-
-    uint32_t count = _wristTiltIntCount;
-    uint32_t delta = count - _wristTiltIntLastLoggedCount;
-    _wristTiltIntLastLoggedCount = count;
-
-    // Read GPIO level BEFORE any I2C reads
-    int pinBefore = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
-
-    // Calculate time from last diagnostic read to ISR
-    int64_t isrTimeUs = _wristTiltIntLastIsrTimeUs;
-    int64_t timeSinceLastDiagUs = isrTimeUs - _wristTiltIntLastDiagTimeUs;
-
-    LOG_I(MODULE_PREFIX, "wristTiltInt: count=%lu delta=%lu pinBefore=%d isrAfterDiag=%lldus",
-          (unsigned long)count, (unsigned long)delta, pinBefore, timeSinceLastDiagUs);
-
-    // Poll accelerometer status registers for diagnostics (this clears IMU latch)
-    _accelerometer.debugPollStatus();
-
-    // Read GPIO level AFTER IMU register reads (latch should be released if IMU was source)
-    int pinAfterImu = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
-
-    // Read RTC status register to check if RTC is asserting INT#
-    uint8_t rtcStatus = 0xFF;
-    _rtc.readStatusRegister(rtcStatus);
-
-    // Read GPIO level AFTER RTC status read
-    int pinAfterRtc = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
-
-    LOG_I(MODULE_PREFIX, "wristTiltInt: pinAfterImu=%d pinAfterRtc=%d rtcStatus=0x%02x",
-          pinAfterImu, pinAfterRtc, rtcStatus);
-
-    // Record when we finished diagnostic reads (for next ISR timing comparison)
-    _wristTiltIntLastDiagTimeUs = esp_timer_get_time();
-}
-#endif
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // /// @brief Check wakeup button press state
@@ -448,51 +289,6 @@ void WordyWatch::logWristTiltInterrupts()
 // }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Show time display on LED panel
-void WordyWatch::showTimeOnDisplay()
-{
-    // Get time from RTC (falling back to system time if RTC read fails)
-    struct tm timeinfo = {};
-    if (_rtc.getTime(&timeinfo))
-    {
-#ifdef DEBUG_TIME_DISPLAY
-        LOG_I(MODULE_PREFIX, "showTimeOnDisplay showing time %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
-#endif
-        // Get LED device and display time
-        RaftDevice* pDevice = getDeviceByName("LEDPanel");
-        if (pDevice)
-        {
-            const led_pattern_t* pattern = getPatternForTime(timeinfo.tm_hour, timeinfo.tm_min);
-            if (!pattern)
-            {
-                LOG_W(MODULE_PREFIX, "showTimeOnDisplay pattern not found for %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
-                return;
-            }
-
-            pDevice->sendCmdJSON("{\"cmd\":\"start\"}");
-
-            String jsonCmd = "{\"cmd\":\"blitMask\",\"width\":" + String(LED_GRID_WIDTH) +
-                ",\"height\":" + String(LED_GRID_HEIGHT) +
-                ",\"clear\":1,\"words\":[";
-            for (uint16_t idx = 0; idx < LED_MASK_WORDS; idx++)
-            {
-                jsonCmd += String(pattern->led_mask[idx]);
-                if (idx + 1 < LED_MASK_WORDS)
-                    jsonCmd += ",";
-            }
-            jsonCmd += "]}";
-            pDevice->sendCmdJSON(jsonCmd.c_str());
-        }
-    }
-#ifdef DEBUG_TIME_DISPLAY
-    else
-    {
-        LOG_E(MODULE_PREFIX, "showTimeOnDisplay failed to get time");
-    }
-#endif
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Add REST API endpoints
 /// @param endpointManager Manager for REST API endpoints
 void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
@@ -502,6 +298,12 @@ void WordyWatch::addRestAPIEndpoints(RestAPIEndpointManager& endpointManager)
         RestAPIEndpoint::ENDPOINT_GET,
         std::bind(&WordyWatch::apiSetTime, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3),
         "settime/YYYY-MM-DDTHH:MM:SS - Set RTC time");
+
+    endpointManager.addEndpoint("settings",
+        RestAPIEndpoint::ENDPOINT_CALLBACK,
+        RestAPIEndpoint::ENDPOINT_GET,
+        std::bind(&WordyWatch::apiSettings, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3),
+        "settings?showsecs=10 - Set persistent display duration");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -515,6 +317,26 @@ String WordyWatch::getStatusJSON() const
         ",\"buttonPressed\":" + String(_powerAndSleep.isPowerButtonPressed() ? "true" : "false") +
         "}";
     return json;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Get settings JSON
+/// @return JSON string
+String WordyWatch::getSettingsJSON() const
+{
+    uint32_t showSecs = _showTimeForMs / 1000;
+    String json = "{\"showsecs\":" + String(showSecs) +
+        ",\"showTimeForMs\":" + String(_showTimeForMs) +
+        "}";
+    return json;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Persist settings to NVS
+bool WordyWatch::persistSettings()
+{
+    String json = getSettingsJSON();
+    return _settingsNVS.setJsonDoc(json.c_str());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -620,15 +442,36 @@ RaftRetCode WordyWatch::apiSetTime(const String& reqStr, String& respStr, const 
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Clear the display
-void WordyWatch::clearDisplay()
+/// @brief REST API endpoint to configure settings
+RaftRetCode WordyWatch::apiSettings(const String& reqStr, String& respStr, const APISourceInfo& /*sourceInfo*/)
 {
-#ifdef DEBUG_TIME_DISPLAY
-    LOG_I(MODULE_PREFIX, "clearDisplay stopping LED panel");
-#endif
+    std::vector<String> params;
+    std::vector<RaftJson::NameValuePair> nameValues;
+    RestAPIEndpointManager::getParamsAndNameValues(reqStr.c_str(), params, nameValues);
 
-    // Get LED device and stop it
-    RaftDevice* pDevice = getDeviceByName("LEDPanel");
-    if (pDevice)
-        pDevice->sendCmdJSON("{\"cmd\":\"stop\"}");
+    if (nameValues.empty())
+    {
+        return Raft::setJsonResult(reqStr.c_str(), respStr, true, "", getSettingsJSON().c_str());
+    }
+
+    RaftJson nameValuesJson = RaftJson::getJSONFromNVPairs(nameValues, true);
+    int showSecs = nameValuesJson.getInt("showsecs", -1);
+    if (showSecs < 0)
+    {
+        return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "badParams");
+    }
+
+    uint64_t showTimeMs = static_cast<uint64_t>(showSecs) * 1000ULL;
+    if (showTimeMs > UINT32_MAX)
+    {
+        return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "showsecsTooLarge");
+    }
+
+    _showTimeForMs = static_cast<uint32_t>(showTimeMs);
+    if (!persistSettings())
+    {
+        return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "persistFailed");
+    }
+
+    return Raft::setJsonResult(reqStr.c_str(), respStr, true, "", getSettingsJSON().c_str());
 }

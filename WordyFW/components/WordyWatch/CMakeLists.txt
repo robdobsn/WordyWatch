@@ -1,6 +1,7 @@
 idf_component_register(
                 SRCS 
                   "WordyWatch.cpp"
+                  "WordyWatchDisplay.cpp"
                 INCLUDE_DIRS
                   "."
                 REQUIRES

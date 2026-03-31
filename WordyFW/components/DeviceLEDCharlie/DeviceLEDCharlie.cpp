@@ -178,16 +178,25 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     
     if (cmd.equalsIgnoreCase("blitMask"))
     {
-        std::vector<int> wordInts;
-        if (!json.getArrayInts("words", wordInts))
-        {
-            return RAFT_INVALID_DATA;
-        }
         std::vector<uint32_t> words;
-        words.reserve(wordInts.size());
-        for (int wordVal : wordInts)
+        String maskStr = json.getString("mask", "");
+        if (!maskStr.isEmpty())
         {
-            words.push_back(static_cast<uint32_t>(wordVal));
+            if (!parseMaskWords(maskStr, words))
+                return RAFT_INVALID_DATA;
+        }
+        else
+        {
+            std::vector<int> wordInts;
+            if (!json.getArrayInts("words", wordInts))
+            {
+                return RAFT_INVALID_DATA;
+            }
+            words.reserve(wordInts.size());
+            for (int wordVal : wordInts)
+            {
+                words.push_back(static_cast<uint32_t>(wordVal));
+            }
         }
         uint16_t width = static_cast<uint16_t>(json.getInt("width", _panel.getWidth()));
         uint16_t height = static_cast<uint16_t>(json.getInt("height", _panel.getHeight()));

@@ -10,8 +10,21 @@
 
 #include "RaftCore.h"
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "RTC.h"
+
+// Debug: install GPIO ISR on wake pin to count wrist-tilt interrupts
+#define DEBUG_WRIST_TILT_INT
+
+// Debug: use simple motion wake-up interrupt instead of wrist tilt (easier to trigger)
+// #define DEBUG_USE_MOTION_WAKEUP_INT
+
+// Use basic tilt interrupt (embedded function, ~35deg change) instead of wrist tilt
+// Wrist tilt INT2 output generates constant periodic pulses (~0.8Hz) regardless of motion
+#define DEBUG_USE_BASIC_TILT_INT
 
 class Accelerometer
 {
@@ -289,6 +302,94 @@ public:
         return true;
     }
 
+#ifdef DEBUG_WRIST_TILT_INT
+    /// @brief Setup GPIO ISR on wake pin to count wrist tilt interrupts
+    /// @param pinNum GPIO pin number for the interrupt
+    void setupWristTiltInterrupt(int pinNum)
+    {
+        if (pinNum < 0)
+        {
+            LOG_W(MODULE_PREFIX, "setupWristTiltInterrupt: no wake pin configured");
+            return;
+        }
+
+        _wristTiltIntPin = pinNum;
+        _wristTiltIntCount = 0;
+
+        // Configure GPIO for falling edge interrupt (active-low, open-drain with pull-up)
+        gpio_config_t io_conf = {};
+        io_conf.intr_type = GPIO_INTR_NEGEDGE;
+        io_conf.mode = GPIO_MODE_INPUT;
+        io_conf.pin_bit_mask = (1ULL << pinNum);
+        io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        esp_err_t err = gpio_config(&io_conf);
+        if (err != ESP_OK)
+        {
+            LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_config failed: %s", esp_err_to_name(err));
+            return;
+        }
+
+        // Install ISR service and add handler
+        err = gpio_install_isr_service(0);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+        {
+            LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_install_isr_service failed: %s", esp_err_to_name(err));
+            return;
+        }
+
+        err = gpio_isr_handler_add((gpio_num_t)pinNum, wristTiltISR, this);
+        if (err != ESP_OK)
+        {
+            LOG_E(MODULE_PREFIX, "setupWristTiltInterrupt: gpio_isr_handler_add failed: %s", esp_err_to_name(err));
+            return;
+        }
+
+        LOG_I(MODULE_PREFIX, "setupWristTiltInterrupt: ISR installed on GPIO %d (falling edge)", pinNum);
+    }
+
+    /// @brief Log wrist tilt interrupt count periodically
+    void logWristTiltInterrupts(RTC& rtc)
+    {
+        if (!Raft::isTimeout(millis(), _wristTiltIntLastLogMs, WRIST_TILT_INT_LOG_INTERVAL_MS))
+            return;
+        _wristTiltIntLastLogMs = millis();
+
+        uint32_t count = _wristTiltIntCount;
+        uint32_t delta = count - _wristTiltIntLastLoggedCount;
+        _wristTiltIntLastLoggedCount = count;
+
+        // Read GPIO level BEFORE any I2C reads
+        int pinBefore = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+        // Calculate time from last diagnostic read to ISR
+        int64_t isrTimeUs = _wristTiltIntLastIsrTimeUs;
+        int64_t timeSinceLastDiagUs = isrTimeUs - _wristTiltIntLastDiagTimeUs;
+
+        LOG_I(MODULE_PREFIX, "wristTiltInt: count=%lu delta=%lu pinBefore=%d isrAfterDiag=%lldus",
+              (unsigned long)count, (unsigned long)delta, pinBefore, timeSinceLastDiagUs);
+
+        // Poll accelerometer status registers for diagnostics (this clears IMU latch)
+        debugPollStatus();
+
+        // Read GPIO level AFTER IMU register reads (latch should be released if IMU was source)
+        int pinAfterImu = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+        // Read RTC status register to check if RTC is asserting INT#
+        uint8_t rtcStatus = 0xFF;
+        rtc.readStatusRegister(rtcStatus);
+
+        // Read GPIO level AFTER RTC status read
+        int pinAfterRtc = _wristTiltIntPin >= 0 ? gpio_get_level((gpio_num_t)_wristTiltIntPin) : -1;
+
+        LOG_I(MODULE_PREFIX, "wristTiltInt: pinAfterImu=%d pinAfterRtc=%d rtcStatus=0x%02x",
+              pinAfterImu, pinAfterRtc, rtcStatus);
+
+        // Record when we finished diagnostic reads (for next ISR timing comparison)
+        _wristTiltIntLastDiagTimeUs = esp_timer_get_time();
+    }
+#endif
+
     /// @brief Clear accelerometer interrupt by reading status registers
     void clearInterrupt()
     {
@@ -387,6 +488,24 @@ public:
 private:
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
+
+#ifdef DEBUG_WRIST_TILT_INT
+    int _wristTiltIntPin = -1;
+    volatile uint32_t _wristTiltIntCount = 0;
+    volatile int64_t _wristTiltIntLastIsrTimeUs = 0;
+    int64_t _wristTiltIntLastDiagTimeUs = 0;
+    uint32_t _wristTiltIntLastLogMs = 0;
+    uint32_t _wristTiltIntLastLoggedCount = 0;
+    static constexpr uint32_t WRIST_TILT_INT_LOG_INTERVAL_MS = 5000;
+    static void IRAM_ATTR wristTiltISR(void* arg)
+    {
+        Accelerometer* self = static_cast<Accelerometer*>(arg);
+        if (!self)
+            return;
+        self->_wristTiltIntCount = self->_wristTiltIntCount + 1;
+        self->_wristTiltIntLastIsrTimeUs = esp_timer_get_time();
+    }
+#endif
 
     static constexpr const char* MODULE_PREFIX = "Acc";
 };
