@@ -10,6 +10,7 @@
 
 #include "RaftDevice.h"
 #include "LEDCharliePanel.h"
+#include <vector>
 
 class RestAPIEndpointManager;
 class APISourceInfo;
@@ -42,12 +43,11 @@ public:
     virtual RaftRetCode sendCmdJSON(const char* jsonCmd) override final;
 
 private:
-    // Display time on LED panel
-    void displayTime(int hour, int minute);
-
     // Handle REST API control commands
     RaftRetCode apiControl(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     bool applyConfiguration();
+    bool applyMaskWords(const std::vector<uint32_t>& words, uint16_t width, uint16_t height, bool clearFirst);
+    bool parseMaskWords(const String& maskStr, std::vector<uint32_t>& wordsOut) const;
 
     LEDCharliePanel _panel;
     bool _isConfigured = false;

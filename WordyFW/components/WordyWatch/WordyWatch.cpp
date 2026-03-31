@@ -20,6 +20,7 @@
 #include "DeviceManager.h"
 #include "APISourceInfo.h"
 #include "RestAPIEndpointManager.h"
+#include "wordclock_patterns.h"
 #include <time.h>
 #include <sys/time.h>
 
@@ -30,6 +31,27 @@
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "WordyWatch";
+
+    const led_pattern_t* getPatternForTime(int hour, int minute)
+    {
+        if (hour < 0 || minute < 0)
+            return nullptr;
+
+        hour = hour % 24;
+        minute = (minute / LED_MINUTE_GRANULARITY) * LED_MINUTE_GRANULARITY;
+        if (minute >= 60)
+            minute = 0;
+
+        for (const auto& pattern : led_patterns)
+        {
+            if (pattern.hour == hour && pattern.minute == minute)
+            {
+                return &pattern;
+            }
+        }
+
+        return nullptr;
+    }
 }
 
 #ifdef DEBUG_WRIST_TILT_INT
@@ -440,10 +462,26 @@ void WordyWatch::showTimeOnDisplay()
         RaftDevice* pDevice = getDeviceByName("LEDPanel");
         if (pDevice)
         {
-            char jsonCmd[100];
-            snprintf(jsonCmd, sizeof(jsonCmd), "{\"cmd\":\"displayTime\",\"hour\":%d,\"minute\":%d}", 
-                    timeinfo.tm_hour, timeinfo.tm_min);
-            pDevice->sendCmdJSON(jsonCmd);
+            const led_pattern_t* pattern = getPatternForTime(timeinfo.tm_hour, timeinfo.tm_min);
+            if (!pattern)
+            {
+                LOG_W(MODULE_PREFIX, "showTimeOnDisplay pattern not found for %02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+                return;
+            }
+
+            pDevice->sendCmdJSON("{\"cmd\":\"start\"}");
+
+            String jsonCmd = "{\"cmd\":\"blitMask\",\"width\":" + String(LED_GRID_WIDTH) +
+                ",\"height\":" + String(LED_GRID_HEIGHT) +
+                ",\"clear\":1,\"words\":[";
+            for (uint16_t idx = 0; idx < LED_MASK_WORDS; idx++)
+            {
+                jsonCmd += String(pattern->led_mask[idx]);
+                if (idx + 1 < LED_MASK_WORDS)
+                    jsonCmd += ",";
+            }
+            jsonCmd += "]}";
+            pDevice->sendCmdJSON(jsonCmd.c_str());
         }
     }
 #ifdef DEBUG_TIME_DISPLAY

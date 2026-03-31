@@ -7,6 +7,8 @@
 #include "DeviceLEDCharlie.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <functional>
 #include <vector>
 #include "RaftUtils.h"
@@ -15,7 +17,6 @@
 #include "RestAPIEndpoint.h"
 #include "DeviceTypeRecordDynamic.h"
 #include "APISourceInfo.h"
-#include "wordclock_patterns.h"
 
 DeviceLEDCharlie::DeviceLEDCharlie(const char* pClassName, const char* pDevConfigJson)
     : RaftDevice(pClassName, pDevConfigJson)
@@ -61,7 +62,7 @@ void DeviceLEDCharlie::addRestAPIEndpoints(RestAPIEndpointManager& endpointManag
         RestAPIEndpoint::ENDPOINT_CALLBACK,
         RestAPIEndpoint::ENDPOINT_GET,
         std::bind(&DeviceLEDCharlie::apiControl, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3),
-        "leds - status; leds/set?x=0&y=0&on=1; leds/clear; leds/fill?on=0");
+    "leds - status; leds/set?x=0&y=0&on=1; leds/clear; leds/fill?on=0; leds/blitMask?mask=0x1,0x2");
 }
 
 uint32_t DeviceLEDCharlie::getDeviceInfoTimestampMs(bool /*includeElemOnlineStatusChanges*/,
@@ -143,63 +144,27 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
         _panel.testAllLEDs();
         return Raft::setJsonBoolResult(reqStr.c_str(), respStr, true);
     }
-    else if (command.equalsIgnoreCase("testtime"))
+    else if (command.equalsIgnoreCase("blitMask"))
     {
-        // Get time from parameters
-        int hour = nameValuesJson.getInt("hour", 0);
-        int minute = nameValuesJson.getInt("minute", 0);
-        if (hour < 0 || hour > 23 || minute < 0 || minute > 59)
+        String maskStr = nameValuesJson.getString("mask", "");
+        if (maskStr.isEmpty())
         {
             return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "badParams");
         }
-
-        // Round to minute granularity
-        minute = (minute / LED_MINUTE_GRANULARITY) * LED_MINUTE_GRANULARITY;
-        
-        // Look up LED pattern for time
-        const led_pattern_t* pattern = nullptr;
-        for (const auto& p : led_patterns)
+        std::vector<uint32_t> words;
+        if (!parseMaskWords(maskStr, words))
         {
-            if (p.hour == hour && p.minute == minute)
-            {
-                pattern = &p;
-                break;
-            }
+            return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "badParams");
         }
-        if (!pattern)
+        uint16_t width = static_cast<uint16_t>(nameValuesJson.getInt("width", _panel.getWidth()));
+        uint16_t height = static_cast<uint16_t>(nameValuesJson.getInt("height", _panel.getHeight()));
+        bool clearFirst = nameValuesJson.getInt("clear", 1) != 0;
+        if (!applyMaskWords(words, width, height, clearFirst))
         {
-            return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "patternNotFound");
-        }
-        // Apply LED pattern
-        _panel.clear();
-        uint32_t row = 0;
-        uint32_t col = 0;
-        for (uint16_t maskWordIdx = 0; maskWordIdx < LED_MASK_WORDS; maskWordIdx++)
-        {
-            uint32_t mask = pattern->led_mask[maskWordIdx];
-            for (uint16_t maskBitIdx = 0; maskBitIdx < 32; maskBitIdx++)
-            {
-                if (mask & (1UL << maskBitIdx))
-                {
-                    _panel.setPixel(col, row, true);
-                }
-                col++;
-                if (col >= LED_GRID_WIDTH)
-                {
-                    col = 0;
-                    row++;
-                    if (row >= LED_GRID_HEIGHT)
-                    {
-                        break;
-                    }
-                }
-            }
+            return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "badParams");
         }
         _lastMutateMs = millis();
-        // _panel.debugPrintLedSequence();
-        String json = "{\"hour\":" + String(pattern->hour) +
-            ",\"minute\":" + String(pattern->minute) + "}";
-        return Raft::setJsonResult(reqStr.c_str(), respStr, true, "", json.c_str());
+        return Raft::setJsonBoolResult(reqStr.c_str(), respStr, true);
     }
 
     return Raft::setJsonErrorResult(reqStr.c_str(), respStr, "unknownCommand");
@@ -211,15 +176,27 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     RaftJson json(jsonCmd);
     String cmd = json.getString("cmd", "");
     
-    if (cmd.equalsIgnoreCase("displayTime"))
+    if (cmd.equalsIgnoreCase("blitMask"))
     {
-        if (!_panel.start())
+        std::vector<int> wordInts;
+        if (!json.getArrayInts("words", wordInts))
         {
-            LOG_E(MODULE_PREFIX, "sendCmdJSON failed to start panel");
+            return RAFT_INVALID_DATA;
         }
-        int hour = json.getInt("hour", -1);
-        int minute = json.getInt("minute", -1);
-        displayTime(hour, minute);
+        std::vector<uint32_t> words;
+        words.reserve(wordInts.size());
+        for (int wordVal : wordInts)
+        {
+            words.push_back(static_cast<uint32_t>(wordVal));
+        }
+        uint16_t width = static_cast<uint16_t>(json.getInt("width", _panel.getWidth()));
+        uint16_t height = static_cast<uint16_t>(json.getInt("height", _panel.getHeight()));
+        bool clearFirst = json.getInt("clear", 1) != 0;
+        if (!applyMaskWords(words, width, height, clearFirst))
+        {
+            return RAFT_INVALID_DATA;
+        }
+        _lastMutateMs = millis();
         return RAFT_OK;
     }
     else if (cmd.equalsIgnoreCase("clear"))
@@ -245,50 +222,49 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     return RAFT_INVALID_DATA;
 }
 
-void DeviceLEDCharlie::displayTime(int hour, int minute)
+bool DeviceLEDCharlie::applyMaskWords(const std::vector<uint32_t>& words, uint16_t width,
+    uint16_t height, bool clearFirst)
 {
-    // Round to minute granularity
-    minute = (minute / LED_MINUTE_GRANULARITY) * LED_MINUTE_GRANULARITY;
-    
-    // Look up LED pattern for time
-    const led_pattern_t* pattern = nullptr;
-    for (const auto& p : led_patterns)
+    if (width == 0 || height == 0)
+        return false;
+
+    uint32_t totalPixels = static_cast<uint32_t>(width) * static_cast<uint32_t>(height);
+    uint32_t expectedWords = (totalPixels + 31) / 32;
+    if (words.size() < expectedWords)
+        return false;
+
+    if (clearFirst)
+        _panel.clear();
+
+    for (uint32_t ledIdx = 0; ledIdx < totalPixels; ledIdx++)
     {
-        if (p.hour == hour && p.minute == minute)
-        {
-            pattern = &p;
+        uint32_t wordIdx = ledIdx / 32;
+        uint32_t bitIdx = ledIdx % 32;
+        bool on = (words[wordIdx] & (1UL << bitIdx)) != 0;
+        uint16_t col = static_cast<uint16_t>(ledIdx % width);
+        uint16_t row = static_cast<uint16_t>(ledIdx / width);
+        _panel.setPixel(col, row, on);
+    }
+    return true;
+}
+
+bool DeviceLEDCharlie::parseMaskWords(const String& maskStr, std::vector<uint32_t>& wordsOut) const
+{
+    const char* ptr = maskStr.c_str();
+    while (ptr && *ptr)
+    {
+        while (*ptr && (std::isspace(static_cast<unsigned char>(*ptr)) || *ptr == ','))
+            ptr++;
+        if (!*ptr)
             break;
-        }
+        char* endPtr = nullptr;
+        unsigned long value = std::strtoul(ptr, &endPtr, 0);
+        if (endPtr == ptr)
+            return false;
+        wordsOut.push_back(static_cast<uint32_t>(value));
+        ptr = endPtr;
     }
-    if (!pattern)
-        return;
-        
-    // Apply LED pattern
-    _panel.clear();
-    uint32_t row = 0;
-    uint32_t col = 0;
-    for (uint16_t maskWordIdx = 0; maskWordIdx < LED_MASK_WORDS; maskWordIdx++)
-    {
-        uint32_t mask = pattern->led_mask[maskWordIdx];
-        for (uint16_t maskBitIdx = 0; maskBitIdx < 32; maskBitIdx++)
-        {
-            if (mask & (1UL << maskBitIdx))
-            {
-                _panel.setPixel(col, row, true);
-            }
-            col++;
-            if (col >= LED_GRID_WIDTH)
-            {
-                col = 0;
-                row++;
-                if (row >= LED_GRID_HEIGHT)
-                {
-                    break;
-                }
-            }
-        }
-    }
-    _lastMutateMs = millis();
+    return !wordsOut.empty();
 }
 
 bool DeviceLEDCharlie::applyConfiguration()

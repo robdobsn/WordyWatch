@@ -27,7 +27,7 @@ The watch displays time as English words on the LED matrix using pre-generated p
 - **Pattern set**: 288 patterns covering 24 hours at 5-minute resolution (layout "Gracegpt8")
 - **Minute granularity**: Time is floored to the nearest 5 minutes
 - **Display duration**: 5 seconds (`showTimeForMs`), then the display is cleared and the watch enters deep sleep
-- **Rendering**: Patterns are stored as 5×32-bit bitmasks per time entry. The `DeviceLEDCharlie` device receives a `displayTime` JSON command from the WordyWatch state machine
+- **Rendering**: Patterns are stored as 5×32-bit bitmasks per time entry. The WordyWatch state machine sends a `blitMask` JSON command with those words to the LED device
 - **Refresh rate**: 50 Hz ISR-driven scan, with precomputed GPIO masks for each lit LED
 
 ### 2. Wake-on-Tilt
@@ -73,7 +73,7 @@ Available via serial console REST API:
 | `leds/clear` | Clear all LEDs |
 | `leds/fill?on=1` | Fill all LEDs |
 | `leds/testAllLEDs` | Sequential test of all LEDs |
-| `leds/testtime?hour=N&minute=N` | Display word clock pattern for a given time |
+| `leds/blitMask?mask=0x1,0x2` | Blit a packed mask (comma-separated 32-bit words) |
 | `leds/status` | Panel status (dimensions, refresh rate, lit count, running) |
 
 ### 7. Connectivity (Currently Disabled on V11)
