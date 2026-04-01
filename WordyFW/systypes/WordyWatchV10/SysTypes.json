@@ -195,6 +195,10 @@
     "wakeIntPinPullup": true,
     "bootButtonPinNum": 9,
     "bootButtonPullup": true,
+    "balls": {
+      "count": 12,
+      "viscosity": 0.5
+    },
     "sleepAfterBootMs": 5000,
     "sleepAfterWakeMs": 1,
     "showTimeForMs": 5000,

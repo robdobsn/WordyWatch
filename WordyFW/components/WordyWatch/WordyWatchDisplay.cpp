@@ -10,6 +10,7 @@
 #include "RaftDevice.h"
 #include "RTC.h"
 #include "wordclock_patterns.h"
+#include <cmath>
 
 // Debug control - uncomment to enable specific debugging
 #define DEBUG_TIME_DISPLAY
@@ -164,6 +165,28 @@ void WordyWatchDisplay::showBreakoutFrame(int paddleTop, int paddleLen, int ball
 
     if (ballX >= 0 && ballX < LED_GRID_WIDTH && ballY >= 0 && ballY < LED_GRID_HEIGHT)
         setLedInMask(mask, static_cast<uint16_t>(ballX), static_cast<uint16_t>(ballY));
+
+    sendMaskToPanel(mask, LED_MASK_WORDS);
+}
+
+void WordyWatchDisplay::showBallSimFrame(const std::array<BallSimGame::Ball, BallSimGame::MAX_BALLS>& balls,
+    int ballCount)
+{
+    uint32_t mask[LED_MASK_WORDS] = {};
+
+    int clampedCount = ballCount;
+    if (clampedCount < 0)
+        clampedCount = 0;
+    if (clampedCount > BallSimGame::MAX_BALLS)
+        clampedCount = BallSimGame::MAX_BALLS;
+
+    for (int idx = 0; idx < clampedCount; idx++)
+    {
+        int x = balls[idx].x / BallSimGame::POS_SCALE;
+        int y = balls[idx].y / BallSimGame::POS_SCALE;
+        if (x >= 0 && x < LED_GRID_WIDTH && y >= 0 && y < LED_GRID_HEIGHT)
+            setLedInMask(mask, static_cast<uint16_t>(x), static_cast<uint16_t>(y));
+    }
 
     sendMaskToPanel(mask, LED_MASK_WORDS);
 }

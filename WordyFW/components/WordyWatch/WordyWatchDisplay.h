@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <time.h>
 #include "RaftSysMod.h"
+#include "BallSimGame.h"
 #include "wordclock_patterns.h"
 
 class RTC;
@@ -26,6 +27,8 @@ public:
     void showBatteryGaugeWithMinuteIndicators(uint8_t ledCount);
     void showBreakoutFrame(int paddleTop, int paddleLen, int ballX, int ballY,
                            const std::array<std::array<bool, LED_GRID_HEIGHT>, 2>& bricks);
+    void showBallSimFrame(const std::array<BallSimGame::Ball, BallSimGame::MAX_BALLS>& balls,
+                          int ballCount);
     void clear();
 
 private:

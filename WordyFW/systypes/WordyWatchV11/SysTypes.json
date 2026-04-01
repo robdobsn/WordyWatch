@@ -215,6 +215,10 @@
     "batteryGaugeShowMs": 1500,
     "batteryGaugeSweepMs": 333,
     "powerButtonVsenseLevel": 1550,
-    "powerButtonOffTimeMs": 2000
+    "powerButtonOffTimeMs": 2000,
+    "balls": {
+      "count": 12,
+      "viscosity": 0.5
+    }
   }
 }

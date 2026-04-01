@@ -2,6 +2,7 @@ idf_component_register(
                 SRCS 
                   "WordyWatch.cpp"
                   "WordyWatchDisplay.cpp"
+                  "BallSimGame.cpp"
                   "BreakoutGame.cpp"
                   "GameMode.cpp"
                 INCLUDE_DIRS

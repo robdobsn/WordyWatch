@@ -131,6 +131,11 @@ void WordyWatch::setup()
     if (_batteryGaugeSweepMs == 0)
         _batteryGaugeSweepMs = 1;
 
+    // Ball simulation game configuration
+    int ballCount = config.getLong("balls/count", 12);
+    float ballViscosity = config.getDouble("balls/viscosity", 0.5);
+    _gameMode.configureBallSim(ballCount, ballViscosity);
+
     // Override with persisted settings if present
     long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
     if (persistedShowTimeMs >= 0)
