@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <stdint.h>
+#include <time.h>
 #include "RaftSysMod.h"
 #include "wordclock_patterns.h"
 
@@ -19,6 +20,7 @@ public:
     explicit WordyWatchDisplay(RaftSysMod& sysMod);
 
     void showTime(RTC& rtc);
+    void showTimeWithMinuteIndicators(const struct tm& timeinfo);
     void showBatteryGauge(uint8_t ledCount);
     void clear();
 

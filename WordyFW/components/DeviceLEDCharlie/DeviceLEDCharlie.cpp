@@ -111,6 +111,8 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
 
     if (command.equalsIgnoreCase("set"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         int x = nameValuesJson.getInt("x", -1);
         int y = nameValuesJson.getInt("y", -1);
         int on = nameValuesJson.getInt("on", 1);
@@ -124,12 +126,16 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
     }
     else if (command.equalsIgnoreCase("clear"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         _panel.clear();
         _lastMutateMs = millis();
         return Raft::setJsonBoolResult(reqStr.c_str(), respStr, true);
     }
     else if (command.equalsIgnoreCase("fill"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         int on = nameValuesJson.getInt("on", 1);
         _panel.fill(on != 0);
         _lastMutateMs = millis();
@@ -146,6 +152,8 @@ RaftRetCode DeviceLEDCharlie::apiControl(const String& reqStr, String& respStr, 
     }
     else if (command.equalsIgnoreCase("blitMask"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         String maskStr = nameValuesJson.getString("mask", "");
         if (maskStr.isEmpty())
         {
@@ -178,6 +186,8 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     
     if (cmd.equalsIgnoreCase("blitMask"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         std::vector<uint32_t> words;
         String maskStr = json.getString("mask", "");
         if (!maskStr.isEmpty())
@@ -210,6 +220,8 @@ RaftRetCode DeviceLEDCharlie::sendCmdJSON(const char* jsonCmd)
     }
     else if (cmd.equalsIgnoreCase("clear"))
     {
+        if (!_panel.isRunning())
+            _panel.start();
         _panel.clear();
         _lastMutateMs = millis();
         return RAFT_OK;

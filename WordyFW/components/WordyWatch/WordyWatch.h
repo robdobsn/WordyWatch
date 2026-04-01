@@ -89,6 +89,9 @@ private:
     int _bootButtonPinNum = -1;
     bool _bootButtonPullup = false;
 
+    int8_t _lastDisplayedSecond = -1;
+    int8_t _lastDisplayedMinute = -1;
+
     // I2C master bus handle
     i2c_master_bus_handle_t _i2cBusHandle = nullptr;
     
@@ -113,6 +116,7 @@ private:
     bool shouldGoToSleep();
     void checkWakeupButtonPress();
     bool initI2C();
+    bool updateDisplayWithMinuteIndicators(bool force);
     RaftRetCode apiSetTime(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     RaftRetCode apiSettings(const String& reqStr, String& respStr, const APISourceInfo& sourceInfo);
     String getSettingsJSON() const;

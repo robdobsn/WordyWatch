@@ -17,6 +17,19 @@
 namespace
 {
     static constexpr const char* MODULE_PREFIX = "WordyWatchDisplay";
+    static constexpr uint16_t MINUTE_INDICATOR_X = 0;
+    static constexpr uint16_t MINUTE_INDICATOR_Y_START = 3;
+    static constexpr uint16_t MINUTE_INDICATOR_COUNT = 5;
+
+    void setLedInMask(uint32_t* maskWords, uint16_t x, uint16_t y)
+    {
+        if (x >= LED_GRID_WIDTH || y >= LED_GRID_HEIGHT)
+            return;
+        const uint16_t ledIndex = y * LED_GRID_WIDTH + x;
+        const uint16_t wordIndex = ledIndex / 32;
+        const uint8_t bitIndex = ledIndex % 32;
+        maskWords[wordIndex] |= (1U << bitIndex);
+    }
 }
 
 WordyWatchDisplay::WordyWatchDisplay(RaftSysMod& sysMod)
@@ -48,6 +61,38 @@ void WordyWatchDisplay::showTime(RTC& rtc)
         LOG_E(MODULE_PREFIX, "showTime failed to get time");
     }
 #endif
+}
+
+void WordyWatchDisplay::showTimeWithMinuteIndicators(const struct tm& timeinfo)
+{
+    const led_pattern_t* pattern = getPatternForTime(timeinfo.tm_hour, timeinfo.tm_min);
+    if (!pattern)
+    {
+        LOG_W(MODULE_PREFIX, "showTimeWithMinuteIndicators pattern not found for %02d:%02d",
+              timeinfo.tm_hour, timeinfo.tm_min);
+        return;
+    }
+
+    uint32_t mask[LED_MASK_WORDS] = {};
+    for (size_t idx = 0; idx < LED_MASK_WORDS; idx++)
+        mask[idx] = pattern->led_mask[idx];
+
+    const uint8_t minuteOffset = static_cast<uint8_t>(timeinfo.tm_min % LED_MINUTE_GRANULARITY);
+    const uint8_t solidCount = minuteOffset;
+    const uint8_t flashIndex = minuteOffset;
+    const bool flashOn = (timeinfo.tm_sec % 2) == 0;
+
+    for (uint8_t idx = 0; idx < solidCount && idx < MINUTE_INDICATOR_COUNT; idx++)
+    {
+        setLedInMask(mask, MINUTE_INDICATOR_X, MINUTE_INDICATOR_Y_START + idx);
+    }
+
+    if (flashOn && flashIndex < MINUTE_INDICATOR_COUNT)
+    {
+        setLedInMask(mask, MINUTE_INDICATOR_X, MINUTE_INDICATOR_Y_START + flashIndex);
+    }
+
+    sendMaskToPanel(mask, LED_MASK_WORDS);
 }
 
 void WordyWatchDisplay::showBatteryGauge(uint8_t ledCount)

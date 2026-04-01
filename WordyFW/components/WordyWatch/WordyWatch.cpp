@@ -232,7 +232,7 @@ void WordyWatch::loop()
         case INITIAL_STATE:
             // Initial state - go to displaying time
             LOG_I(MODULE_PREFIX, "loop initial state, going to display time");
-            _display.showTime(_rtc);
+            updateDisplayWithMinuteIndicators(true);
             setState(DISPLAYING_TIME);
             return;
         case DISPLAYING_TIME:
@@ -308,10 +308,12 @@ void WordyWatch::loop()
                     if (Raft::isTimeout(millis(), _batteryGaugeStartMs, _batteryGaugeShowMs))
                     {
                         _batteryGaugeActive = false;
-                        _display.showTime(_rtc);
+                        updateDisplayWithMinuteIndicators(true);
                     }
                     return;
                 }
+
+                updateDisplayWithMinuteIndicators(false);
             }
             if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
             {
@@ -329,16 +331,22 @@ void WordyWatch::loop()
             return;
 
         case SLEEPING:
+#ifdef FEATURE_POWER_CONTROL_ENABLE_SLEEP
             _powerAndSleep.enterDeepSleep(-1);
 
             // Note that we will not return from deep sleep as it will reset the CPU
             setState(WOKEN_UP);
+#else
+            return;
+#endif
             return;
 
         case WOKEN_UP:
             // Check wakeup reason
             _powerAndSleep.checkWakeupReason(_accelerometer, _rtc);
             _timeLastWokenMs = millis();
+            _lastDisplayedSecond = -1;
+            _lastDisplayedMinute = -1;
             setState(DISPLAYING_TIME);
             return;
         case SHUTDOWN_REQUESTED:
@@ -351,6 +359,26 @@ void WordyWatch::loop()
             // Do nothing - waiting for shutdown            
             return;
     }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Update display with minute indicators
+bool WordyWatch::updateDisplayWithMinuteIndicators(bool force)
+{
+    time_t now = time(nullptr);
+    if (now <= 0)
+        return false;
+
+    struct tm timeinfo = {};
+    localtime_r(&now, &timeinfo);
+
+    if (!force && (timeinfo.tm_sec == _lastDisplayedSecond) && (timeinfo.tm_min == _lastDisplayedMinute))
+        return false;
+
+    _display.showTimeWithMinuteIndicators(timeinfo);
+    _lastDisplayedSecond = static_cast<int8_t>(timeinfo.tm_sec);
+    _lastDisplayedMinute = static_cast<int8_t>(timeinfo.tm_min);
+    return true;
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -26,6 +26,7 @@ The watch displays time as English words on the LED matrix using pre-generated p
 
 - **Pattern set**: 288 patterns covering 24 hours at 5-minute resolution (layout "Gracegpt8")
 - **Minute granularity**: Time is floored to the nearest 5 minutes
+- **Minute indicators**: Five LEDs in column x=0 at y=3..7 show minutes past the last 5-minute word time (solid), with the next indicator flashing at 1 Hz to show seconds
 - **Display duration**: 5 seconds (`showTimeForMs`), then the display is cleared and the watch enters deep sleep
 - **Rendering**: Patterns are stored as 5×32-bit bitmasks per time entry. The WordyWatch state machine sends a `blitMask` JSON command with those words to the LED device
 - **Refresh rate**: 50 Hz ISR-driven scan, with precomputed GPIO masks for each lit LED
@@ -132,16 +133,7 @@ Inspired by the QlockOne clock, individual LEDs in the grid corners (or an unuse
 
 This requires a 1 Hz callback or timer while the display is active. The RTC's 32.768 kHz CLKOUT could be divided down, or a simple `esp_timer` periodic callback can toggle the LED state.
 
-### 2. Better Minute Resolution
-
-The current pattern set has 5-minute granularity (288 patterns for 24 hours). Finer resolution could be achieved by:
-
-- **Dot indicators**: Light 1–4 individual LEDs (e.g. the four grid corners) to represent the minutes past the displayed 5-minute word time. One dot = +1 min, two dots = +2 min, etc. This is the approach used by the QlockTwo and many commercial word clocks.
-- **Expanded pattern set**: Generate 1-minute-resolution patterns (1440 per day). This increases flash usage (~29 KB at 20 bytes per pattern) but is feasible.
-
-The dot-indicator approach is preferred since it adds minute precision without increasing pattern storage.
-
-### 3. Nearest-5-Minute Rounding
+### 2. Nearest-5-Minute Rounding
 
 Currently the displayed time is floored to the 5-minute boundary (e.g. 10:08 shows as "TEN OH FIVE"). Rounding to the *nearest* 5 minutes would be more intuitive:
 
@@ -152,7 +144,7 @@ Implementation: compute `(minute + 2) / 5 * 5` instead of `minute / 5 * 5`. When
 
 If dot indicators (improvement 3) are also implemented, rounding becomes unnecessary since the exact minute is always visible.
 
-### 4. Button-Based Time Setting
+### 3. Button-Based Time Setting
 
 The hardware already supports long-press detection (2000 ms threshold). A proposed time-setting flow:
 
