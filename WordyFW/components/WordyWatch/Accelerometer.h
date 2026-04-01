@@ -17,7 +17,7 @@
 #include "RTC.h"
 
 // Debug: install GPIO ISR on wake pin to count wrist-tilt interrupts
-#define DEBUG_WRIST_TILT_INT
+// #define DEBUG_WRIST_TILT_INT
 
 // Debug: use simple motion wake-up interrupt instead of wrist tilt (easier to trigger)
 // #define DEBUG_USE_MOTION_WAKEUP_INT
@@ -180,7 +180,7 @@ public:
             {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
             {0x0E, 0x00},  // INT2_CTRL: clear all DRDY/FIFO routing on INT2
             {0x5F, 0x00},  // MD2_CFG: clear all routing
-            {0x58, 0x80},  // TAP_CFG: INTERRUPTS_ENABLE (bit7), no LIR (wrist tilt is always pulsed)
+            {0x58, 0x81},  // TAP_CFG: INTERRUPTS_ENABLE (bit7) + LIR (bit0) - latch interrupt until read
             {0x19, 0x84},  // CTRL10_C: wrist_tilt_en (bit7) + func_en (bit2) - enable embedded functions
             {0x0B, 0x01}   // DRDY_PULSE_CFG_G: int2_wrist_tilt (bit0) - route wrist tilt to INT2
         };
@@ -535,6 +535,18 @@ private:
     uint32_t _wristTiltIntLastLogMs = 0;
     uint32_t _wristTiltIntLastLoggedCount = 0;
     static constexpr uint32_t WRIST_TILT_INT_LOG_INTERVAL_MS = 5000;
+public:
+    /// @brief Check if new tilt interrupts have occurred and clear the count
+    /// @return Number of interrupts since last call
+    uint32_t getAndClearTiltIntCount()
+    {
+        uint32_t count = _wristTiltIntCount;
+        uint32_t last = _wristTiltIntLastClearedCount;
+        _wristTiltIntLastClearedCount = count;
+        return count - last;
+    }
+private:
+    uint32_t _wristTiltIntLastClearedCount = 0;
     static void IRAM_ATTR wristTiltISR(void* arg)
     {
         Accelerometer* self = static_cast<Accelerometer*>(arg);

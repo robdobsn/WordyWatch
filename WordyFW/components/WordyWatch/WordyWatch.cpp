@@ -327,23 +327,10 @@ void WordyWatch::loop()
                             _display.showBatteryGaugeWithMinuteIndicators(0);
                         }
                     }
-                    else
+                    else if (_batteryGaugeLastShown != _batteryGaugeTargetLeds)
                     {
-                        const uint32_t sweepDurationMs = _batteryGaugeSweepMs;
-                        uint32_t elapsedMs = Raft::timeElapsed(millis(), _batteryGaugeSweepStartMs);
-                        uint32_t stepMs = sweepDurationMs / _batteryGaugeTargetLeds;
-                        if (stepMs == 0)
-                            stepMs = 1;
-                        uint32_t stepIndex = (elapsedMs % sweepDurationMs) / stepMs;
-                        uint8_t animLeds = static_cast<uint8_t>(stepIndex + 1);
-                        if (animLeds > _batteryGaugeTargetLeds)
-                            animLeds = _batteryGaugeTargetLeds;
-
-                        if (animLeds != _batteryGaugeLastShown)
-                        {
-                            _display.showBatteryGaugeWithMinuteIndicators(animLeds);
-                            _batteryGaugeLastShown = animLeds;
-                        }
+                        _display.showBatteryGaugeWithMinuteIndicators(_batteryGaugeTargetLeds);
+                        _batteryGaugeLastShown = _batteryGaugeTargetLeds;
                     }
 
                     if (Raft::isTimeout(millis(), _batteryGaugeStartMs, _batteryGaugeShowMs))
@@ -398,6 +385,14 @@ void WordyWatch::loop()
             // Note that we will not return from deep sleep as it will reset the CPU
             setState(WOKEN_UP);
 #else
+#ifdef DEBUG_WRIST_TILT_INT
+            // When sleep is disabled, simulate wake on tilt interrupt
+            if (_accelerometer.getAndClearTiltIntCount() > 0)
+            {
+                LOG_I(MODULE_PREFIX, "loop tilt interrupt detected (no-sleep mode), simulating wake");
+                setState(WOKEN_UP);
+            }
+#endif
             return;
 #endif
             return;

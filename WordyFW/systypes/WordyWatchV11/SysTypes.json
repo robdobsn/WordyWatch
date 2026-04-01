@@ -189,7 +189,6 @@
     "wakeIntPinPullup": true,
     "bootButtonPinNum": 9,
     "bootButtonPullup": true,
-    "showTimeForMs": 10000,
     "i2cSdaPin": 6,
     "i2cSclPin": 8,
     "i2cFreqHz": 10000,
@@ -197,8 +196,8 @@
     "rtcI2CAddr": "0x52",
     "rtcDevType": "RV-3028-C7",
     "WristTilt": {
-      "latency": 4,
-      "threshold": 8,
+      "latency": 8,
+      "threshold": 16,
       "mask": 48
     },
     "minuteResolution": 5,
@@ -209,10 +208,11 @@
       "v2": 4.32,
       "a2": 1413
     },
+    "showTimeForMs": 10000,
     "batteryLowV": 3.45,
     "batteryGaugeMinV": 3.45,
     "batteryGaugeMaxV": 4.2,
-    "batteryGaugeShowMs": 1500,
+    "batteryGaugeShowMs": 3000,
     "batteryGaugeSweepMs": 333,
     "powerButtonVsenseLevel": 1550,
     "powerButtonOffTimeMs": 2000,

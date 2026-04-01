@@ -320,7 +320,7 @@ private:
 
                 // Calculate battery level from average
                 _batteryV = getVoltageFromADCReading(_vsenseAvg.getAverage());
-                _batteryValid = (_vsenseSampleCount >= 100);
+                _batteryValid = (_vsenseSampleCount >= BATTERY_VALID_SAMPLE_COUNT);
 
 #ifdef DEBUG_VSENSE_READING
                 if (_vsenseSampleCount % 10 == 0)
@@ -430,7 +430,8 @@ private:
     float _batteryLowV = BATTERY_LOW_V_DEFAULT;
     bool _shutdownRequired = false;
     uint32_t _lastBatteryCheckMs = 0;
-    static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 10000;
+    static constexpr uint32_t BATTERY_CHECK_INTERVAL_MS = 1000;
+    static constexpr uint32_t BATTERY_VALID_SAMPLE_COUNT = 10;
     uint32_t _lastWarnBatLowShutdownTimeMs = 0;
     
     // VSENSE readings
