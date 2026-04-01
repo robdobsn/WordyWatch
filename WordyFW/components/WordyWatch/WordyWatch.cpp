@@ -282,8 +282,12 @@ void WordyWatch::loop()
                     {
                         if (_batteryGaugeLastShown != 0)
                         {
-                            _display.showBatteryGauge(0);
+                            _display.showBatteryGaugeWithMinuteIndicators(0);
                             _batteryGaugeLastShown = 0;
+                        }
+                        else if (_batteryGaugeLastShown == 0)
+                        {
+                            _display.showBatteryGaugeWithMinuteIndicators(0);
                         }
                     }
                     else
@@ -300,7 +304,7 @@ void WordyWatch::loop()
 
                         if (animLeds != _batteryGaugeLastShown)
                         {
-                            _display.showBatteryGauge(animLeds);
+                            _display.showBatteryGaugeWithMinuteIndicators(animLeds);
                             _batteryGaugeLastShown = animLeds;
                         }
                     }

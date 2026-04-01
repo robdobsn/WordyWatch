@@ -22,6 +22,7 @@ public:
     void showTime(RTC& rtc);
     void showTimeWithMinuteIndicators(const struct tm& timeinfo);
     void showBatteryGauge(uint8_t ledCount);
+    void showBatteryGaugeWithMinuteIndicators(uint8_t ledCount);
     void clear();
 
 private:

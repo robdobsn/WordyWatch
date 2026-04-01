@@ -114,6 +114,30 @@ void WordyWatchDisplay::showBatteryGauge(uint8_t ledCount)
     sendMaskToPanel(mask, LED_MASK_WORDS);
 }
 
+void WordyWatchDisplay::showBatteryGaugeWithMinuteIndicators(uint8_t ledCount)
+{
+    if (ledCount > LED_GRID_WIDTH)
+        ledCount = LED_GRID_WIDTH;
+
+    uint32_t mask[LED_MASK_WORDS] = {};
+    const uint16_t baseIndex = (LED_GRID_HEIGHT - 1) * LED_GRID_WIDTH;
+
+    for (uint16_t col = 0; col < ledCount; col++)
+    {
+        const uint16_t ledIndex = baseIndex + col;
+        const uint16_t wordIndex = ledIndex / 32;
+        const uint8_t bitIndex = ledIndex % 32;
+        mask[wordIndex] |= (1U << bitIndex);
+    }
+
+    for (uint8_t idx = 0; idx < MINUTE_INDICATOR_COUNT; idx++)
+    {
+        setLedInMask(mask, MINUTE_INDICATOR_X, MINUTE_INDICATOR_Y_START + idx);
+    }
+
+    sendMaskToPanel(mask, LED_MASK_WORDS);
+}
+
 void WordyWatchDisplay::clear()
 {
 #ifdef DEBUG_TIME_DISPLAY
