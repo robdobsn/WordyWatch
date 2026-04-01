@@ -120,6 +120,7 @@ void WordyWatch::setup()
 
     // Battery gauge display configuration
     _batteryGaugeShowMs = config.getLong("batteryGaugeShowMs", 1500);
+    _batteryGaugeSweepMs = config.getLong("batteryGaugeSweepMs", 333);
     _batteryGaugeMinV = config.getDouble("batteryGaugeMinV", batteryLowV);
     _batteryGaugeMaxV = config.getDouble("batteryGaugeMaxV", 4.2);
     if (_batteryGaugeMaxV <= _batteryGaugeMinV)
@@ -127,6 +128,8 @@ void WordyWatch::setup()
         _batteryGaugeMinV = batteryLowV;
         _batteryGaugeMaxV = 4.2f;
     }
+    if (_batteryGaugeSweepMs == 0)
+        _batteryGaugeSweepMs = 1;
 
     // Override with persisted settings if present
     long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
@@ -264,15 +267,44 @@ void WordyWatch::loop()
                     LOG_I(MODULE_PREFIX, "battery gauge show V=%.2f min=%.2f max=%.2f leds=%u", batteryV, _batteryGaugeMinV,
                           _batteryGaugeMaxV, static_cast<unsigned>(ledCount));
 #endif
-                    _display.showBatteryGauge(ledCount);
                     _batteryGaugeActive = true;
                     _batteryGaugeStartMs = millis();
+                    _batteryGaugeSweepStartMs = _batteryGaugeStartMs;
+                    _batteryGaugeTargetLeds = ledCount;
+                    _batteryGaugeLastShown = 0;
                 }
 
                 _lastBootButtonPressed = bootButtonPressed;
 
                 if (_batteryGaugeActive)
                 {
+                    if (_batteryGaugeTargetLeds == 0)
+                    {
+                        if (_batteryGaugeLastShown != 0)
+                        {
+                            _display.showBatteryGauge(0);
+                            _batteryGaugeLastShown = 0;
+                        }
+                    }
+                    else
+                    {
+                        const uint32_t sweepDurationMs = _batteryGaugeSweepMs;
+                        uint32_t elapsedMs = Raft::timeElapsed(millis(), _batteryGaugeSweepStartMs);
+                        uint32_t stepMs = sweepDurationMs / _batteryGaugeTargetLeds;
+                        if (stepMs == 0)
+                            stepMs = 1;
+                        uint32_t stepIndex = (elapsedMs % sweepDurationMs) / stepMs;
+                        uint8_t animLeds = static_cast<uint8_t>(stepIndex + 1);
+                        if (animLeds > _batteryGaugeTargetLeds)
+                            animLeds = _batteryGaugeTargetLeds;
+
+                        if (animLeds != _batteryGaugeLastShown)
+                        {
+                            _display.showBatteryGauge(animLeds);
+                            _batteryGaugeLastShown = animLeds;
+                        }
+                    }
+
                     if (Raft::isTimeout(millis(), _batteryGaugeStartMs, _batteryGaugeShowMs))
                     {
                         _batteryGaugeActive = false;

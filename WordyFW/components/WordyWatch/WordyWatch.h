@@ -70,6 +70,7 @@ private:
     // Configuration parameters
     uint32_t _showTimeForMs = 10000;
     uint32_t _batteryGaugeShowMs = 1500;
+    uint32_t _batteryGaugeSweepMs = 333;
     float _batteryGaugeMinV = 3.4f;
     float _batteryGaugeMaxV = 4.2f;
 
@@ -80,6 +81,9 @@ private:
     uint32_t _lastBootButtonPressMs = 0;
     bool _batteryGaugeActive = false;
     uint32_t _batteryGaugeStartMs = 0;
+    uint8_t _batteryGaugeTargetLeds = 0;
+    uint8_t _batteryGaugeLastShown = 0;
+    uint32_t _batteryGaugeSweepStartMs = 0;
     bool _lastBootButtonPressed = false;
 
     int _bootButtonPinNum = -1;

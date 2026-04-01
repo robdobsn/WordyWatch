@@ -188,6 +188,7 @@
     "batteryGaugeMinV": 3.55,
     "batteryGaugeMaxV": 4.2,
     "batteryGaugeShowMs": 1500,
+    "batteryGaugeSweepMs": 333,
     "powerButtonVsenseLevel": 1550,
     "powerButtonOffTimeMs": 2000,
     "wakeIntPinNum": 9,
