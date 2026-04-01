@@ -49,20 +49,28 @@ The watch wakes from deep sleep when the user raises their wrist.
 - **Low battery shutdown**: When battery voltage drops below 3.45V, the power latch pin is released, cutting power
 - **Power button detection**: A power button press raises the VSENSE ADC above a threshold (1550) and also pulls WAKE_INT low via a FET. Press duration is tracked with 200ms debounce. The BOOT button is GPIO9 and should only use an internal pullup after boot (strapping pin).
 
-### 4. RTC Timekeeping
+### 4. Battery Gauge
+
+- **Trigger**: BOOT button (GPIO9, active-low) while the display is on; internal pullup is enabled only after boot (strapping pin)
+- **Display**: Bottom row 12-LED bar gauge (left-to-right)
+- **Animation**: Sweeps from 1 LED up to the target count and repeats during the display window
+- **Timing**: Gauge shows for `batteryGaugeShowMs`; sweep duration `batteryGaugeSweepMs`
+- **Scaling**: Battery voltage mapped between `batteryGaugeMinV` and `batteryGaugeMaxV`
+
+### 5. RTC Timekeeping
 
 - **Clock source**: RV-3028-C7 with 32.768 kHz CLKOUT
 - **System time sync**: On every boot, the ESP32 system time is set from the RTC
 - **Time read**: BCD-encoded 7-byte I2C read (seconds through year)
 - **Interrupt management**: All RTC interrupt sources are disabled on init and status flags cleared to prevent spurious triggers on the shared wake pin
 
-### 5. Time Setting
+### 6. Time Setting
 
 - **Serial console**: REST API endpoint `settime/YYYY-MM-DDTHH:MM:SS` sets both the RTC and system time
 - **BLE Current Time Service**: Configured (read + write) but BLE is currently disabled on V11
 - **Button-based time set**: Long press detection (2000ms) is configured but the time-setting state machine is not implemented
 
-### 6. LED Panel Control API
+### 7. LED Panel Control API
 
 Available via serial console REST API:
 
@@ -76,7 +84,7 @@ Available via serial console REST API:
 | `leds/blitMask?mask=0x1,0x2` | Blit a packed mask (comma-separated 32-bit words) |
 | `leds/status` | Panel status (dimensions, refresh rate, lit count, running) |
 
-### 7. Connectivity (Currently Disabled on V11)
+### 8. Connectivity (Currently Disabled on V11)
 
 - **BLE**: Peripheral role with Battery, Heart Rate, Current Time, and Device Info standard services, plus a custom command/response service. Enabled on V10, disabled on V11
 - **WiFi**: Disabled on both revisions
@@ -118,23 +126,13 @@ In practice, deep sleep resets the ESP32-C6, so every wakeup re-enters through `
 
 ## Planned Improvements
 
-### 1. Battery Level Display
-
-The watch currently monitors battery voltage but does not display it to the user. Several display strategies are possible given the 12×11 word clock grid:
-
-- **Bottom-row gauge**: The bottom row of the Gracegpt8 grid (`H S E V E N T E E N E D`) contains 12 LEDs. A subset of these LEDs could be lit as a horizontal bar gauge — e.g. 12 LEDs = full, 3 LEDs = low — shown briefly after the time words or on a separate button-press gesture.
-- **Character reuse**: Spell out a rough percentage by reusing letter positions already on the grid (e.g. "SEVEN" for 70%, "THREE" for 30%). This avoids adding new patterns but limits precision to the words available.
-- **Dedicated icon row**: Reserve one or two LEDs (e.g. corners) as a low-battery warning indicator, lit only when voltage is below a threshold.
-
-Battery voltage is already averaged over 100 ADC samples; this averaged value maps to percentage via a discharge curve lookup.
-
-### 2. Seconds Counter
+### 1. Seconds Counter
 
 Inspired by the QlockOne clock, individual LEDs in the grid corners (or an unused row/column) could be toggled once per second to give a visual sense of time passing while the display is on. For example, four corner LEDs could cycle in sequence (0–3) to represent seconds modulo 4, producing a subtle ticking animation during the 5-second display window.
 
 This requires a 1 Hz callback or timer while the display is active. The RTC's 32.768 kHz CLKOUT could be divided down, or a simple `esp_timer` periodic callback can toggle the LED state.
 
-### 3. Better Minute Resolution
+### 2. Better Minute Resolution
 
 The current pattern set has 5-minute granularity (288 patterns for 24 hours). Finer resolution could be achieved by:
 
@@ -143,7 +141,7 @@ The current pattern set has 5-minute granularity (288 patterns for 24 hours). Fi
 
 The dot-indicator approach is preferred since it adds minute precision without increasing pattern storage.
 
-### 4. Nearest-5-Minute Rounding
+### 3. Nearest-5-Minute Rounding
 
 Currently the displayed time is floored to the 5-minute boundary (e.g. 10:08 shows as "TEN OH FIVE"). Rounding to the *nearest* 5 minutes would be more intuitive:
 
@@ -154,7 +152,7 @@ Implementation: compute `(minute + 2) / 5 * 5` instead of `minute / 5 * 5`. When
 
 If dot indicators (improvement 3) are also implemented, rounding becomes unnecessary since the exact minute is always visible.
 
-### 5. Button-Based Time Setting
+### 4. Button-Based Time Setting
 
 The hardware already supports long-press detection (2000 ms threshold). A proposed time-setting flow:
 
