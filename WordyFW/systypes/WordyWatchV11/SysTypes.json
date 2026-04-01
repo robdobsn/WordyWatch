@@ -185,9 +185,11 @@
     "powerCtrlPin": 17,
     "strapCtrlPin": 1,
     "vsensePin": 2,
-    "wakePinNum": 5,
-    "wakePinPullup": true,
-    "showTimeForMs": 5000,
+    "wakeIntPinNum": 5,
+    "wakeIntPinPullup": true,
+    "bootButtonPinNum": 9,
+    "bootButtonPullup": true,
+    "showTimeForMs": 10000,
     "i2cSdaPin": 6,
     "i2cSclPin": 8,
     "i2cFreqHz": 10000,
@@ -208,7 +210,10 @@
       "a2": 1413
     },
     "batteryLowV": 3.45,
-    "vsenseButtonLevel": 1550,
-    "buttonOffTimeMs": 2000
+    "batteryGaugeMinV": 3.45,
+    "batteryGaugeMaxV": 4.2,
+    "batteryGaugeShowMs": 1500,
+    "powerButtonVsenseLevel": 1550,
+    "powerButtonOffTimeMs": 2000
   }
 }

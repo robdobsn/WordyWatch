@@ -38,13 +38,13 @@ public:
     /// @param vsenseSlope Slope for ADC to voltage conversion
     /// @param vsenseIntercept Intercept for ADC to voltage conversion
     /// @param batteryLowV Battery low voltage threshold
-    /// @param vsenseButtonLevel VSENSE ADC level when button is pressed
-    /// @param buttonOffTimeMs Time threshold for button off detection
+    /// @param powerButtonVsenseLevel VSENSE ADC level when power button is pressed
+    /// @param powerButtonOffTimeMs Time threshold for power button off detection
     void configure(int powerCtrlPin, int strapCtrlPin, int vsensePin,
                    double vsenseSlope, double vsenseIntercept, 
-                   float batteryLowV, uint32_t vsenseButtonLevel,
-                   uint32_t buttonOffTimeMs,
-                   int wakePinNum, bool wakePinPullup)
+                   float batteryLowV, uint32_t powerButtonVsenseLevel,
+                   uint32_t powerButtonOffTimeMs,
+                   int wakeIntPinNum, bool wakeIntPinPullup)
     {
         // Store configuration
         _powerCtrlPin = powerCtrlPin;
@@ -53,10 +53,10 @@ public:
         _vsenseSlope = vsenseSlope;
         _vsenseIntercept = vsenseIntercept;
         _batteryLowV = batteryLowV;
-        _vsenseButtonLevel = vsenseButtonLevel;
-        _buttonOffTimeMs = buttonOffTimeMs;
-        _wakePinNum = wakePinNum;
-        _wakePinPullup = wakePinPullup;
+        _powerButtonVsenseLevel = powerButtonVsenseLevel;
+        _powerButtonOffTimeMs = powerButtonOffTimeMs;
+        _wakeIntPinNum = wakeIntPinNum;
+        _wakeIntPinPullup = wakeIntPinPullup;
         
         // Enable power hold
         enablePowerHold();
@@ -70,21 +70,21 @@ public:
             pinMode(_vsensePin, INPUT);
         }
 
-        // Configure wake pin if specified
-        if (_wakePinNum >= 0)
+        // Configure WAKE_INT pin if specified
+        if (_wakeIntPinNum >= 0)
         {
-            pinMode(_wakePinNum, INPUT);
-            if (_wakePinPullup)
+            pinMode(_wakeIntPinNum, INPUT);
+            if (_wakeIntPinPullup)
             {
-                gpio_pullup_en((gpio_num_t)_wakePinNum);
+                gpio_pullup_en((gpio_num_t)_wakeIntPinNum);
             }
         }
 
         // Debug
-        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d strapCtrlPin %d vSensePin %d vSenseSlope %.2e vSenseIntercept %.2f wakePinNum %d wakePinPullup %s",
+        LOG_I(MODULE_PREFIX, "config powerCtrlPin %d strapCtrlPin %d vSensePin %d vSenseSlope %.2e vSenseIntercept %.2f wakeIntPinNum %d wakeIntPinPullup %s",
                     powerCtrlPin, strapCtrlPin, vsensePin,
                     vsenseSlope, vsenseIntercept,
-                    wakePinNum, wakePinPullup ? "Y" : "N");
+                wakeIntPinNum, wakeIntPinPullup ? "Y" : "N");
 
         // Mark as configured
         _configured = true;
@@ -98,7 +98,7 @@ public:
         if (!_configured)
             return false;
             
-        // Read VSENSE and update button state
+        // Read VSENSE and update power button state
         readVSENSE();
                 
         // Check battery level periodically
@@ -111,10 +111,10 @@ public:
     }
     
     /// @brief Check if power button is pressed
-    /// @return true if button is currently pressed
+    /// @return true if power button is currently pressed
     bool isPowerButtonPressed() const
     {
-        return _buttonPressed;
+        return _powerButtonPressed;
     }
 
     /// @brief Check and log wakeup reason (includes power button, accelerometer tilt, and RTC status)
@@ -134,8 +134,8 @@ public:
                 // EXT1 wakeup on GPIO (shared line) - determine which device triggered it
                 wakeupSource = "EXT1 GPIO";
 
-                // Check if the button is pressed (VSENSE above threshold)
-                bool buttonPressed = isPowerButtonPressed();
+                // Check if the power button is pressed (VSENSE above threshold)
+                bool powerButtonPressed = isPowerButtonPressed();
 
                 // Check if the IMU flagged a tilt event
                 bool tiltDetected = false;
@@ -145,8 +145,8 @@ public:
                 uint8_t rtcStatus = 0;
                 rtc.readStatusRegister(rtcStatus);
 
-                if (buttonPressed)
-                    wakeupSource = "button press";
+                if (powerButtonPressed)
+                    wakeupSource = "power button";
                 else if (tiltDetected)
                     wakeupSource = "wrist tilt";
                 else if (rtcStatus & 0x03)  // AF or TF flags
@@ -154,8 +154,8 @@ public:
                 else
                     wakeupSource = "EXT1 (source unclear)";
 
-                LOG_I(MODULE_PREFIX, "checkWakeupReason EXT1 detail: button=%s tilt=%s rtcStatus=0x%02x",
-                      buttonPressed ? "YES" : "no", tiltDetected ? "YES" : "no", rtcStatus);
+                LOG_I(MODULE_PREFIX, "checkWakeupReason EXT1 detail: powerButton=%s tilt=%s rtcStatus=0x%02x",
+                      powerButtonPressed ? "YES" : "no", tiltDetected ? "YES" : "no", rtcStatus);
                 break;
             }
             case ESP_SLEEP_WAKEUP_TIMER:
@@ -168,13 +168,13 @@ public:
         LOG_I(MODULE_PREFIX, "checkWakeupReason: %s (reason %d)", wakeupSource, wakeupReason);
     }
     
-    /// @brief Get button press duration in milliseconds
-    /// @return Duration button has been pressed, or 0 if not pressed
-    uint32_t getButtonPressDuration() const
+    /// @brief Get power button press duration in milliseconds
+    /// @return Duration power button has been pressed, or 0 if not pressed
+    uint32_t getPowerButtonPressDuration() const
     {
-        if (!_buttonPressed || _buttonPressDownTimeMs == 0)
+        if (!_powerButtonPressed || _powerButtonPressDownTimeMs == 0)
             return 0;
-        return Raft::timeElapsed(millis(), _buttonPressDownTimeMs);
+        return Raft::timeElapsed(millis(), _powerButtonPressDownTimeMs);
     }
     
     /// @brief Get current battery voltage
@@ -243,13 +243,13 @@ public:
 #endif
         }
 
-        // Check for wake pin
-        if (_wakePinNum >= 0)
+        // Check for WAKE_INT pin
+        if (_wakeIntPinNum >= 0)
         {
-            esp_sleep_enable_ext1_wakeup(1ULL << _wakePinNum, ESP_EXT1_WAKEUP_ANY_LOW);
+            esp_sleep_enable_ext1_wakeup(1ULL << _wakeIntPinNum, ESP_EXT1_WAKEUP_ANY_LOW);
 #ifdef DEBUG_SLEEP_AND_WAKEUP
             LOG_I(MODULE_PREFIX, "Deep sleep wakeup configured on pin %d (%s)", 
-                  _wakePinNum, _wakePinPullup ? "pullup" : "pulldown");
+                  _wakeIntPinNum, _wakeIntPinPullup ? "pullup" : "pulldown");
 #endif
         }
 
@@ -258,12 +258,12 @@ public:
 #endif
     }
     
-    /// @brief Reset button press state
-    void resetButtonState()
+    /// @brief Reset power button press state
+    void resetPowerButtonState()
     {
-        _buttonPressed = false;
-        _buttonPressChangeTimeMs = 0;
-        _buttonPressDownTimeMs = 0;
+        _powerButtonPressed = false;
+        _powerButtonPressChangeTimeMs = 0;
+        _powerButtonPressDownTimeMs = 0;
     }
 
 private:
@@ -278,43 +278,43 @@ private:
         // Read VSENSE pin
         _vsenseCurVal = analogRead(_vsensePin);
 
-        // Check if button is pressed (VSENSE above threshold)
-        if (_vsenseCurVal > _vsenseButtonLevel)
+        // Check if power button is pressed (VSENSE above threshold)
+        if (_vsenseCurVal > _powerButtonVsenseLevel)
         {
             // Check if press just started
-            if (!_buttonPressed)
+            if (!_powerButtonPressed)
             {
                 // Record press down time
-                _buttonPressDownTimeMs = millis();
-                _buttonPressed = true;
+                _powerButtonPressDownTimeMs = millis();
+                _powerButtonPressed = true;
             
 #ifdef DEBUG_POWER_MANAGEMENT
-            LOG_I(MODULE_PREFIX, "Button pressed at %dms", 
-                    (int)_buttonPressDownTimeMs);
+            LOG_I(MODULE_PREFIX, "Power button pressed at %dms", 
+                    (int)_powerButtonPressDownTimeMs);
 #endif
             }
 
             // Pressed
-            _buttonPressChangeTimeMs = millis();
+            _powerButtonPressChangeTimeMs = millis();
         }
         else
         {
             // Not pressed currently - check if recently released
-            if (_buttonPressed)
+            if (_powerButtonPressed)
             {
-                if (Raft::isTimeout(millis(), _buttonPressChangeTimeMs, 200))
+                if (Raft::isTimeout(millis(), _powerButtonPressChangeTimeMs, 200))
                 {
                     // Button released after debounce
 #ifdef DEBUG_POWER_MANAGEMENT
-                    LOG_I(MODULE_PREFIX, "Button released after %dms", 
-                          (int)Raft::timeElapsed(millis(), _buttonPressDownTimeMs));
+                    LOG_I(MODULE_PREFIX, "Power button released after %dms", 
+                          (int)Raft::timeElapsed(millis(), _powerButtonPressDownTimeMs));
 #endif
-                    _buttonPressed = false;
+                    _powerButtonPressed = false;
                 }
             }
             else
             {
-                // Button not pressed so we can use this reading as battery voltage sample
+                // Power button not pressed so we can use this reading as battery voltage sample
                 _vsenseAvg.sample(_vsenseCurVal);
                 _vsenseSampleCount++;
 
@@ -373,8 +373,8 @@ private:
         return adcReading * _vsenseSlope + _vsenseIntercept;
     }
 
-    /// @brief Temporarily disable power hold (for checking wake button)
-    /// Call this before checking wake button state, then call enablePowerHold() after
+    /// @brief Temporarily disable power hold (for checking WAKE_INT pin state)
+    /// Call this before checking WAKE_INT pin state, then call enablePowerHold() after
     void disablePowerHold()
     {
         if (_powerCtrlPin >= 0)
@@ -384,7 +384,7 @@ private:
         }
     }
     
-    /// @brief Re-enable power hold after checking wake button
+    /// @brief Re-enable power hold after checking WAKE_INT pin
     void enablePowerHold()
     {
         if (_powerCtrlPin >= 0)
@@ -414,8 +414,8 @@ private:
     int _powerCtrlPin = -1;
     int _strapCtrlPin = -1;
     int _vsensePin = -1;
-    int _wakePinNum = -1;
-    bool _wakePinPullup = false;
+    int _wakeIntPinNum = -1;
+    bool _wakeIntPinPullup = false;
     
     // VSENSE to voltage conversion
     static constexpr float VSENSE_SLOPE_DEFAULT = 0.00223;
@@ -440,14 +440,14 @@ private:
     SimpleMovingAverage<100> _vsenseAvg;
     uint32_t _vsenseSampleCount = 0;
     
-    // Button detection via VSENSE
-    static constexpr uint32_t VSENSE_BUTTON_LEVEL_DEFAULT = 2300;
-    uint32_t _vsenseButtonLevel = VSENSE_BUTTON_LEVEL_DEFAULT;
-    bool _buttonPressed = false;
-    uint32_t _buttonPressChangeTimeMs = 0;
-    uint32_t _buttonPressDownTimeMs = 0;
-    static constexpr uint32_t BUTTON_OFF_TIME_MS_DEFAULT = 2000;
-    uint32_t _buttonOffTimeMs = BUTTON_OFF_TIME_MS_DEFAULT;
+    // Power button detection via VSENSE
+    static constexpr uint32_t POWER_BUTTON_VSENSE_LEVEL_DEFAULT = 2300;
+    uint32_t _powerButtonVsenseLevel = POWER_BUTTON_VSENSE_LEVEL_DEFAULT;
+    bool _powerButtonPressed = false;
+    uint32_t _powerButtonPressChangeTimeMs = 0;
+    uint32_t _powerButtonPressDownTimeMs = 0;
+    static constexpr uint32_t POWER_BUTTON_OFF_TIME_MS_DEFAULT = 2000;
+    uint32_t _powerButtonOffTimeMs = POWER_BUTTON_OFF_TIME_MS_DEFAULT;
     
     // Power timing
     static constexpr uint32_t TIME_TO_HOLD_POWER_CTRL_PIN_LOW_MS = 500;

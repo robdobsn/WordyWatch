@@ -69,12 +69,21 @@ private:
 
     // Configuration parameters
     uint32_t _showTimeForMs = 10000;
+    uint32_t _batteryGaugeShowMs = 1500;
+    float _batteryGaugeMinV = 3.4f;
+    float _batteryGaugeMaxV = 4.2f;
 
     // Time setting configuration
     uint32_t _longPressMs = 2000;
     uint8_t _minuteResolution = 5;
     
-    uint32_t _lastUserButtonPressMs = 0;
+    uint32_t _lastBootButtonPressMs = 0;
+    bool _batteryGaugeActive = false;
+    uint32_t _batteryGaugeStartMs = 0;
+    bool _lastBootButtonPressed = false;
+
+    int _bootButtonPinNum = -1;
+    bool _bootButtonPullup = false;
 
     // I2C master bus handle
     i2c_master_bus_handle_t _i2cBusHandle = nullptr;

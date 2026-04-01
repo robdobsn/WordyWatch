@@ -42,12 +42,12 @@ The watch wakes from deep sleep when the user raises their wrist.
 
 ### 3. Deep Sleep & Power Management
 
-- **Sleep entry**: After displaying time for 5 seconds, the watch stops the LED panel and enters ESP32 deep sleep with EXT1 wakeup on the wake pin (any-low trigger)
+- **Sleep entry**: After displaying time for 5 seconds, the watch stops the LED panel and enters ESP32 deep sleep with EXT1 wakeup on the WAKE_INT pin (any-low trigger)
 - **Power latch**: GPIO 17 is held HIGH via `gpio_hold_en` to maintain power during deep sleep
 - **Deep sleep = full reset**: `esp_deep_sleep_start()` resets the CPU; on wake, the firmware restarts from `app_main()`
 - **Battery monitoring**: VSENSE ADC is read every second, averaged over 100 samples. Battery voltage is computed via two-point linear calibration
 - **Low battery shutdown**: When battery voltage drops below 3.45V, the power latch pin is released, cutting power
-- **Button detection**: A physical button press raises the VSENSE ADC above a threshold (1550). Press duration is tracked with 200ms debounce
+- **Power button detection**: A power button press raises the VSENSE ADC above a threshold (1550) and also pulls WAKE_INT low via a FET. Press duration is tracked with 200ms debounce. The BOOT button is GPIO9 and should only use an internal pullup after boot (strapping pin).
 
 ### 4. RTC Timekeeping
 
@@ -163,7 +163,7 @@ The hardware already supports long-press detection (2000 ms threshold). A propos
 3. **Minute-setting mode**: Display flashes the current 5-minute word. Short presses increment by 5 minutes. Long-press confirms, writes to RTC, and returns to normal display.
 4. **Timeout**: If no button press for 30 seconds in either setting mode, cancel and revert to the previous time.
 
-Visual feedback: the word pattern should blink at ~2 Hz while in setting mode to distinguish from normal display. The PowerAndSleep class already tracks button press duration and provides `isPowerButtonPressed()` and `getButtonPressDuration()`.
+Visual feedback: the word pattern should blink at ~2 Hz while in setting mode to distinguish from normal display. The PowerAndSleep class already tracks power button press duration and provides `isPowerButtonPressed()` and `getPowerButtonPressDuration()`.
 
 ---
 
@@ -181,7 +181,7 @@ Power on / wakeup
     ├── Display word pattern for 5 seconds
     ├── Stop LED panel
     ├── esp_deep_sleep_start()
-    │       ├── EXT1 wakeup source: GPIO 5 (any-low)
+    │       ├── EXT1 wakeup source: GPIO 5 (WAKE_INT, any-low)
     │       ├── gpio_hold_en(GPIO 17) keeps power latch HIGH
     │       └── All RAM lost, RTC memory preserved
     │

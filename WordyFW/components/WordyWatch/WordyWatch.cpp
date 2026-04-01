@@ -67,11 +67,13 @@ void WordyWatch::setup()
     // Get battery low voltage
     float batteryLowV = config.getDouble("batteryLowV", 3.55);
 
-    // Get VSENSE button level
-    uint32_t vsenseButtonLevel = config.getLong("vsenseButtonLevel", 2300);
+    // Get power button VSENSE level
+    uint32_t powerButtonVsenseLevel = config.getLong("powerButtonVsenseLevel",
+                                                     config.getLong("vsenseButtonLevel", 2300));
 
-    // Get button off time
-    uint32_t buttonOffTimeMs = config.getLong("buttonOffTimeMs", 2000);
+    // Get power button off time
+    uint32_t powerButtonOffTimeMs = config.getLong("powerButtonOffTimeMs",
+                                                   config.getLong("buttonOffTimeMs", 2000));
 
     // Get ADC calibration
     double vsenseSlope = 0.00223;  // VSENSE_SLOPE_DEFAULT
@@ -88,19 +90,43 @@ void WordyWatch::setup()
         vsenseIntercept = v1 - vsenseSlope * a1;
     }
 
-    // Get wake pin configuration
-    pinName = config.getString("wakePinNum", "");
-    int wakePinNum = ConfigPinMap::getPinFromName(pinName.c_str());
-    bool wakePinPullup = config.getBool("wakePinPullup", false);
+    // Get WAKE_INT pin configuration
+    pinName = config.getString("wakeIntPinNum", "");
+    if (pinName.length() == 0)
+        pinName = config.getString("wakePinNum", "");
+    int wakeIntPinNum = ConfigPinMap::getPinFromName(pinName.c_str());
+    bool wakeIntPinPullup = config.getBool("wakeIntPinPullup",
+                                           config.getBool("wakePinPullup", false));
+
+    // Get BOOT button configuration
+    pinName = config.getString("bootButtonPinNum", "");
+    _bootButtonPinNum = ConfigPinMap::getPinFromName(pinName.c_str());
+    _bootButtonPullup = config.getBool("bootButtonPullup", false);
+    if (_bootButtonPinNum >= 0)
+    {
+        pinMode(_bootButtonPinNum, INPUT);
+        if (_bootButtonPullup)
+            gpio_pullup_en((gpio_num_t)_bootButtonPinNum);
+    }
 
     // Configure power management
     _powerAndSleep.configure(powerCtrlPin, strapCtrlPin, vsensePin,
                      vsenseSlope, vsenseIntercept,
-                     batteryLowV, vsenseButtonLevel, buttonOffTimeMs,
-                     wakePinNum, wakePinPullup);
+                     batteryLowV, powerButtonVsenseLevel, powerButtonOffTimeMs,
+                     wakeIntPinNum, wakeIntPinPullup);
 
     // Get sleep configuration
     _showTimeForMs = config.getLong("showTimeForMs", 10000);
+
+    // Battery gauge display configuration
+    _batteryGaugeShowMs = config.getLong("batteryGaugeShowMs", 1500);
+    _batteryGaugeMinV = config.getDouble("batteryGaugeMinV", batteryLowV);
+    _batteryGaugeMaxV = config.getDouble("batteryGaugeMaxV", 4.2);
+    if (_batteryGaugeMaxV <= _batteryGaugeMinV)
+    {
+        _batteryGaugeMinV = batteryLowV;
+        _batteryGaugeMaxV = 4.2f;
+    }
 
     // Override with persisted settings if present
     long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
@@ -164,17 +190,17 @@ void WordyWatch::setup()
     }
 
 #ifdef DEBUG_WRIST_TILT_INT
-    // Install GPIO ISR to count wrist tilt interrupts on wake pin
-    _accelerometer.setupWristTiltInterrupt(wakePinNum);
+    // Install GPIO ISR to count wrist tilt interrupts on WAKE_INT pin
+    _accelerometer.setupWristTiltInterrupt(wakeIntPinNum);
 #endif
 
     // Debug - do initial power reading
     bool isShutdownRequired = _powerAndSleep.update();
-    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f isShutdownRequired %d vSenseButtonLevel %d buttonOffTime %dms", 
+    LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f isShutdownRequired %d powerButtonVsenseLevel %d powerButtonOffTime %dms", 
                 powerCtrlPin, strapCtrlPin, vsensePin, 
                 (int)_powerAndSleep.getVSENSEReading(), 
                 _powerAndSleep.getBatteryVoltage(), 
-                batteryLowV, isShutdownRequired, vsenseButtonLevel, buttonOffTimeMs);
+                batteryLowV, isShutdownRequired, powerButtonVsenseLevel, powerButtonOffTimeMs);
     
     // Initialize time last woken
     _timeLastWokenMs = millis();
@@ -208,6 +234,53 @@ void WordyWatch::loop()
             return;
         case DISPLAYING_TIME:
             // Displaying time
+            {
+                bool bootButtonPressed = false;
+                if (_bootButtonPinNum >= 0)
+                    bootButtonPressed = (gpio_get_level((gpio_num_t)_bootButtonPinNum) == 0);
+
+                if (bootButtonPressed && !_lastBootButtonPressed && !_batteryGaugeActive)
+                {
+                    float batteryV = _powerAndSleep.getBatteryVoltage();
+                    if (batteryV < 0.0f)
+                        batteryV = 0.0f;
+
+                    float fraction = 0.0f;
+                    if (_batteryGaugeMaxV > _batteryGaugeMinV)
+                    {
+                        fraction = (batteryV - _batteryGaugeMinV) / (_batteryGaugeMaxV - _batteryGaugeMinV);
+                    }
+
+                    if (fraction < 0.0f)
+                        fraction = 0.0f;
+                    if (fraction > 1.0f)
+                        fraction = 1.0f;
+
+                    uint8_t ledCount = static_cast<uint8_t>(fraction * LED_GRID_WIDTH + 0.5f);
+                    if (ledCount > LED_GRID_WIDTH)
+                        ledCount = LED_GRID_WIDTH;
+
+#ifdef DEBUG_LOOP_STATE_MACHINE
+                    LOG_I(MODULE_PREFIX, "battery gauge show V=%.2f min=%.2f max=%.2f leds=%u", batteryV, _batteryGaugeMinV,
+                          _batteryGaugeMaxV, static_cast<unsigned>(ledCount));
+#endif
+                    _display.showBatteryGauge(ledCount);
+                    _batteryGaugeActive = true;
+                    _batteryGaugeStartMs = millis();
+                }
+
+                _lastBootButtonPressed = bootButtonPressed;
+
+                if (_batteryGaugeActive)
+                {
+                    if (Raft::isTimeout(millis(), _batteryGaugeStartMs, _batteryGaugeShowMs))
+                    {
+                        _batteryGaugeActive = false;
+                        _display.showTime(_rtc);
+                    }
+                    return;
+                }
+            }
             if (Raft::isTimeout(millis(), _currentStateStartMs, _showTimeForMs))
             {
 #ifdef DEBUG_LOOP_STATE_MACHINE
@@ -327,7 +400,7 @@ String WordyWatch::getStatusJSON() const
     String json = "{\"vSense\":" + String(_powerAndSleep.getVSENSEReading()) +
         ",\"avgVSense\":" + String(_powerAndSleep.getVSENSEAverage()) +
         ",\"calculatedV\":" + String(_powerAndSleep.getBatteryVoltage(), 2) +
-        ",\"buttonPressed\":" + String(_powerAndSleep.isPowerButtonPressed() ? "true" : "false") +
+        ",\"powerButtonPressed\":" + String(_powerAndSleep.isPowerButtonPressed() ? "true" : "false") +
         "}";
     return json;
 }

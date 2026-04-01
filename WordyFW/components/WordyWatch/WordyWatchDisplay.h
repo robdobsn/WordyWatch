@@ -19,6 +19,7 @@ public:
     explicit WordyWatchDisplay(RaftSysMod& sysMod);
 
     void showTime(RTC& rtc);
+    void showBatteryGauge(uint8_t ledCount);
     void clear();
 
 private:

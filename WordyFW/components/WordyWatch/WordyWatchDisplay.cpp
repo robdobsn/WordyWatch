@@ -50,6 +50,25 @@ void WordyWatchDisplay::showTime(RTC& rtc)
 #endif
 }
 
+void WordyWatchDisplay::showBatteryGauge(uint8_t ledCount)
+{
+    if (ledCount > LED_GRID_WIDTH)
+        ledCount = LED_GRID_WIDTH;
+
+    uint32_t mask[LED_MASK_WORDS] = {};
+    const uint16_t baseIndex = (LED_GRID_HEIGHT - 1) * LED_GRID_WIDTH;
+
+    for (uint16_t col = 0; col < ledCount; col++)
+    {
+        const uint16_t ledIndex = baseIndex + col;
+        const uint16_t wordIndex = ledIndex / 32;
+        const uint8_t bitIndex = ledIndex % 32;
+        mask[wordIndex] |= (1U << bitIndex);
+    }
+
+    sendMaskToPanel(mask, LED_MASK_WORDS);
+}
+
 void WordyWatchDisplay::clear()
 {
 #ifdef DEBUG_TIME_DISPLAY
