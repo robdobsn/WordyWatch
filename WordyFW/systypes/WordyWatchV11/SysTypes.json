@@ -219,6 +219,11 @@
     "balls": {
       "count": 12,
       "viscosity": 0.5
+    },
+    "breakout": {
+      "brickRows": 8,
+      "ballTickMs": 100,
+      "paddleSpeed": 0.25
     }
   }
 }

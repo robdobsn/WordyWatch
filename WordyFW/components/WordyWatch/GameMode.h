@@ -22,6 +22,7 @@ public:
     };
 
     void configureBallSim(int count, float viscosity);
+    void configureBreakout(int brickRows, uint32_t ballTickMs, float paddleSpeed);
     void start(uint32_t nowMs);
     UpdateResult update(Accelerometer& accel, bool bootPressed, uint32_t nowMs);
     void render(WordyWatchDisplay& display);
@@ -51,13 +52,16 @@ private:
     bool _needsRender = false;
     int _paddleTop = 0;
     float _paddleTopF = 0.0f;
+    float _paddleAlpha = 0.25f;
 
     int _ballCount = 12;
     float _ballViscosity = 0.5f;
 
+    int _breakoutBrickRows = 0;
+    uint32_t _breakoutTickMs = 100;
+
     static constexpr uint32_t LONG_PRESS_MS = 1500;
     static constexpr uint32_t GAME_TIMEOUT_MS = 60000;
     static constexpr uint32_t GAME_OVER_EXIT_MS = 10000;
-    static constexpr uint32_t TICK_MS_BREAKOUT = 100;
     static constexpr uint32_t TICK_MS_BALLSIM = 33;
 };

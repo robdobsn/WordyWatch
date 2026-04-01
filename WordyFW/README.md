@@ -26,7 +26,7 @@ The watch displays time as English words on the LED matrix using pre-generated p
 
 - **Pattern set**: 288 patterns covering 24 hours at 5-minute resolution (layout "Gracegpt8")
 - **Minute granularity**: Time is floored to the nearest 5 minutes
-- **Minute indicators**: Five LEDs in column x=0 at y=3..7 show minutes past the last 5-minute word time (solid), with the next indicator flashing at 1 Hz to show seconds
+- **Minute indicators**: Five LEDs in column x=0 at y=3..7 show minutes past the last 5-minute word time (solid), with the next indicator flashing to indicate the upcoming minute
 - **Display duration**: 5 seconds (`showTimeForMs`), then the display is cleared and the watch enters deep sleep
 - **Rendering**: Patterns are stored as 5×32-bit bitmasks per time entry. The WordyWatch state machine sends a `blitMask` JSON command with those words to the LED device
 - **Refresh rate**: 50 Hz ISR-driven scan, with precomputed GPIO masks for each lit LED
@@ -70,6 +70,25 @@ The watch wakes from deep sleep when the user raises their wrist.
 - **Serial console**: REST API endpoint `settime/YYYY-MM-DDTHH:MM:SS` sets both the RTC and system time
 - **BLE Current Time Service**: Configured (read + write) but BLE is currently disabled on V11
 - **Button-based time set**: Long press detection (2000ms) is configured but the time-setting state machine is not implemented
+
+### 7. Game Mode
+
+Two simple motion-controlled games are built in for when the display is on.
+
+- **Enter game mode**: Long-press BOOT (≥1500 ms)
+- **Exit game mode**: Long-press BOOT again, or wait for the 60s timeout
+- **Cycle games**: Short-press BOOT to switch between games
+
+**Breakout**
+- Paddle on the left, bricks on the right
+- Tilt the watch to move the paddle vertically
+- Win by clearing the bricks; loss or win exits after a short delay
+
+**Ball Sim**
+- Sand-like grains roll under gravity
+- Tilt the watch to move the grains in X/Y
+
+### 8. LED Panel Control API
 
 ### 7. LED Panel Control API
 
@@ -127,24 +146,7 @@ In practice, deep sleep resets the ESP32-C6, so every wakeup re-enters through `
 
 ## Planned Improvements
 
-### 1. Seconds Counter
-
-Inspired by the QlockOne clock, individual LEDs in the grid corners (or an unused row/column) could be toggled once per second to give a visual sense of time passing while the display is on. For example, four corner LEDs could cycle in sequence (0–3) to represent seconds modulo 4, producing a subtle ticking animation during the 5-second display window.
-
-This requires a 1 Hz callback or timer while the display is active. The RTC's 32.768 kHz CLKOUT could be divided down, or a simple `esp_timer` periodic callback can toggle the LED state.
-
-### 2. Nearest-5-Minute Rounding
-
-Currently the displayed time is floored to the 5-minute boundary (e.g. 10:08 shows as "TEN OH FIVE"). Rounding to the *nearest* 5 minutes would be more intuitive:
-
-- Minutes 0–2: round down (show current 5-min word)
-- Minutes 3–4: round up (show next 5-min word)
-
-Implementation: compute `(minute + 2) / 5 * 5` instead of `minute / 5 * 5`. When the rounded value is 60, increment the hour and use minute 0. This is a one-line change in the time-to-pattern-index mapping, combined with appropriate hour rollover logic.
-
-If dot indicators (improvement 3) are also implemented, rounding becomes unnecessary since the exact minute is always visible.
-
-### 3. Button-Based Time Setting
+### 1. Button-Based Time Setting
 
 The hardware already supports long-press detection (2000 ms threshold). A proposed time-setting flow:
 

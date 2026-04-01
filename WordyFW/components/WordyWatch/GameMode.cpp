@@ -6,6 +6,7 @@
 
 #include "GameMode.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 
@@ -20,6 +21,14 @@ void GameMode::configureBallSim(int count, float viscosity)
     _ballSim.configure(_ballCount, _ballViscosity);
 }
 
+void GameMode::configureBreakout(int brickRows, uint32_t ballTickMs, float paddleSpeed)
+{
+    _breakoutBrickRows = std::clamp(brickRows, 1, LED_GRID_HEIGHT);
+    _breakoutTickMs = std::clamp<uint32_t>(ballTickMs, 20u, 1000u);
+    _paddleAlpha = std::clamp(paddleSpeed, 0.05f, 1.0f);
+    _breakout.configure(_breakoutBrickRows);
+}
+
 void GameMode::start(uint32_t nowMs)
 {
     _active = true;
@@ -31,6 +40,9 @@ void GameMode::start(uint32_t nowMs)
     _needsRender = true;
     if (_currentGame == GameType::Breakout)
     {
+        if (_breakoutBrickRows == 0)
+            _breakoutBrickRows = LED_GRID_HEIGHT;
+        _breakout.configure(_breakoutBrickRows);
         _breakout.reset();
         _paddleTop = _breakout.getPaddleTop();
         _paddleTopF = static_cast<float>(_paddleTop);
@@ -81,7 +93,7 @@ GameMode::UpdateResult GameMode::update(Accelerometer& accel, bool bootPressed, 
         return result;
     }
 
-    uint32_t tickMs = (_currentGame == GameType::Breakout) ? TICK_MS_BREAKOUT : TICK_MS_BALLSIM;
+    uint32_t tickMs = (_currentGame == GameType::Breakout) ? _breakoutTickMs : TICK_MS_BALLSIM;
     if (nowMs - _lastUpdateMs >= tickMs)
     {
         _lastUpdateMs = nowMs;
@@ -167,8 +179,7 @@ void GameMode::updatePaddle(Accelerometer& accel)
     if (targetTopF > static_cast<float>(range))
         targetTopF = static_cast<float>(range);
 
-    const float alpha = 0.25f;
-    _paddleTopF = _paddleTopF + alpha * (targetTopF - _paddleTopF);
+    _paddleTopF = _paddleTopF + _paddleAlpha * (targetTopF - _paddleTopF);
     _paddleTop = static_cast<int>(std::lround(_paddleTopF));
 }
 
@@ -202,6 +213,9 @@ void GameMode::cycleGame()
     _gameOverStartMs = 0;
     if (_currentGame == GameType::Breakout)
     {
+        if (_breakoutBrickRows == 0)
+            _breakoutBrickRows = LED_GRID_HEIGHT;
+        _breakout.configure(_breakoutBrickRows);
         _breakout.reset();
         _paddleTop = _breakout.getPaddleTop();
         _paddleTopF = static_cast<float>(_paddleTop);

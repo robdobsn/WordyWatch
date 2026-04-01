@@ -136,6 +136,12 @@ void WordyWatch::setup()
     float ballViscosity = config.getDouble("balls/viscosity", 0.5);
     _gameMode.configureBallSim(ballCount, ballViscosity);
 
+    // Breakout game configuration
+    int breakoutBrickRows = config.getLong("breakout/brickRows", 0);
+    uint32_t breakoutBallTickMs = static_cast<uint32_t>(config.getLong("breakout/ballTickMs", 100));
+    float breakoutPaddleSpeed = config.getDouble("breakout/paddleSpeed", 0.25);
+    _gameMode.configureBreakout(breakoutBrickRows, breakoutBallTickMs, breakoutPaddleSpeed);
+
     // Override with persisted settings if present
     long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
     if (persistedShowTimeMs >= 0)

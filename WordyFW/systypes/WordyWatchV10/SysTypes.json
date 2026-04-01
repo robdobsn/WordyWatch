@@ -199,6 +199,11 @@
       "count": 12,
       "viscosity": 0.5
     },
+    "breakout": {
+      "brickRows": 8,
+      "ballTickMs": 100,
+      "paddleSpeed": 0.25
+    },
     "sleepAfterBootMs": 5000,
     "sleepAfterWakeMs": 1,
     "showTimeForMs": 5000,
