@@ -21,12 +21,12 @@ void GameMode::configureBallSim(int count, float viscosity)
     _ballSim.configure(_ballCount, _ballViscosity);
 }
 
-void GameMode::configureBreakout(int brickRows, uint32_t ballTickMs, float paddleSpeed)
+void GameMode::configureBreakout(int brickColumns, uint32_t ballTickMs, float paddleSpeed)
 {
-    _breakoutBrickRows = std::clamp(brickRows, 1, LED_GRID_HEIGHT);
+    _breakoutBrickColumns = std::clamp(brickColumns, 1, 2);
     _breakoutTickMs = std::clamp<uint32_t>(ballTickMs, 20u, 1000u);
     _paddleAlpha = std::clamp(paddleSpeed, 0.05f, 1.0f);
-    _breakout.configure(_breakoutBrickRows);
+    _breakout.configure(_breakoutBrickColumns);
 }
 
 void GameMode::start(uint32_t nowMs)
@@ -34,15 +34,16 @@ void GameMode::start(uint32_t nowMs)
     _active = true;
     _bootPressedPrev = false;
     _bootPressStartMs = 0;
+    _suppressShortPressOnce = true;
     _startMs = nowMs;
     _gameOverStartMs = 0;
     _lastUpdateMs = 0;
     _needsRender = true;
     if (_currentGame == GameType::Breakout)
     {
-        if (_breakoutBrickRows == 0)
-            _breakoutBrickRows = LED_GRID_HEIGHT;
-        _breakout.configure(_breakoutBrickRows);
+        if (_breakoutBrickColumns <= 0)
+            _breakoutBrickColumns = 2;
+        _breakout.configure(_breakoutBrickColumns);
         _breakout.reset();
         _paddleTop = _breakout.getPaddleTop();
         _paddleTopF = static_cast<float>(_paddleTop);
@@ -76,11 +77,19 @@ GameMode::UpdateResult GameMode::update(Accelerometer& accel, bool bootPressed, 
         if (_bootPressedPrev)
         {
             uint32_t pressDurationMs = nowMs - _bootPressStartMs;
-            if (pressDurationMs < LONG_PRESS_MS)
+            if (_suppressShortPressOnce)
+            {
+                _suppressShortPressOnce = false;
+            }
+            else if (pressDurationMs < LONG_PRESS_MS)
             {
                 cycleGame();
                 _needsRender = true;
             }
+        }
+        else if (_suppressShortPressOnce)
+        {
+            _suppressShortPressOnce = false;
         }
         _bootPressStartMs = 0;
     }
@@ -213,9 +222,9 @@ void GameMode::cycleGame()
     _gameOverStartMs = 0;
     if (_currentGame == GameType::Breakout)
     {
-        if (_breakoutBrickRows == 0)
-            _breakoutBrickRows = LED_GRID_HEIGHT;
-        _breakout.configure(_breakoutBrickRows);
+        if (_breakoutBrickColumns <= 0)
+            _breakoutBrickColumns = 2;
+        _breakout.configure(_breakoutBrickColumns);
         _breakout.reset();
         _paddleTop = _breakout.getPaddleTop();
         _paddleTopF = static_cast<float>(_paddleTop);

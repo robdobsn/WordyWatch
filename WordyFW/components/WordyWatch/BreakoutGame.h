@@ -18,7 +18,7 @@ public:
 
     BreakoutGame();
 
-    void configure(int brickRows);
+    void configure(int brickColumns);
     void reset();
     void setPaddleTop(int top);
     void update();
@@ -45,5 +45,5 @@ private:
     int _dy = 1;
     bool _won = false;
     bool _lost = false;
-    int _brickRows = LED_GRID_HEIGHT;
+    int _brickColumns = 2;
 };

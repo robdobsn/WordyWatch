@@ -221,7 +221,7 @@
       "viscosity": 0.5
     },
     "breakout": {
-      "brickRows": 8,
+      "brickColumns": 2,
       "ballTickMs": 100,
       "paddleSpeed": 0.25
     }

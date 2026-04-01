@@ -13,9 +13,9 @@ BreakoutGame::BreakoutGame()
     reset();
 }
 
-void BreakoutGame::configure(int brickRows)
+void BreakoutGame::configure(int brickColumns)
 {
-    _brickRows = std::clamp(brickRows, 1, LED_GRID_HEIGHT);
+    _brickColumns = std::clamp(brickColumns, 1, 2);
 }
 
 void BreakoutGame::reset()
@@ -23,10 +23,10 @@ void BreakoutGame::reset()
     for (auto& col : _bricks)
         col.fill(false);
 
-    for (auto& col : _bricks)
+    for (int colIdx = 0; colIdx < _brickColumns; ++colIdx)
     {
-        for (int row = 0; row < _brickRows; ++row)
-            col[row] = true;
+        for (int row = 0; row < LED_GRID_HEIGHT; ++row)
+            _bricks[colIdx][row] = true;
     }
 
     _paddleTop = (LED_GRID_HEIGHT - PADDLE_LEN) / 2;
