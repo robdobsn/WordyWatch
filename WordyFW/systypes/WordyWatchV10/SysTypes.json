@@ -49,7 +49,7 @@
     "crlfOnTx": 1,
     "protocol": "RICSerial",
     "logLevel": "D"
-  },
+      "mask": 48
   "CommandSerial": {
     "enable": 0,
     "logLevel": "D",

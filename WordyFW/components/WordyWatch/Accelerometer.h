@@ -472,6 +472,28 @@ public:
     }
 #endif
 
+    /// @brief Read raw accelerometer data
+    /// @param ax X axis raw sample
+    /// @param ay Y axis raw sample
+    /// @param az Z axis raw sample
+    /// @return True if successful
+    bool readAccelRaw(int16_t& ax, int16_t& ay, int16_t& az)
+    {
+        if (!_devHandle)
+            return false;
+
+        uint8_t accelReg = 0x28;
+        uint8_t accelData[6] = {};
+        esp_err_t err = i2c_master_transmit_receive(_devHandle, &accelReg, 1, accelData, 6, 1000);
+        if (err != ESP_OK)
+            return false;
+
+        ax = static_cast<int16_t>(accelData[0] | (accelData[1] << 8));
+        ay = static_cast<int16_t>(accelData[2] | (accelData[3] << 8));
+        az = static_cast<int16_t>(accelData[4] | (accelData[5] << 8));
+        return true;
+    }
+
     /// @brief Remove device from I2C bus and cleanup
     void deinit()
     {

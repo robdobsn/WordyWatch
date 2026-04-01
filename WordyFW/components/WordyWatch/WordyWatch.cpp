@@ -242,39 +242,65 @@ void WordyWatch::loop()
                 if (_bootButtonPinNum >= 0)
                     bootButtonPressed = (gpio_get_level((gpio_num_t)_bootButtonPinNum) == 0);
 
-                if (bootButtonPressed && !_lastBootButtonPressed && !_batteryGaugeActive)
+                if (bootButtonPressed)
                 {
-                    float batteryV = _powerAndSleep.getBatteryVoltage();
-                    if (batteryV < 0.0f)
-                        batteryV = 0.0f;
-
-                    float fraction = 0.0f;
-                    if (_batteryGaugeMaxV > _batteryGaugeMinV)
+                    if (!_bootButtonDown)
                     {
-                        fraction = (batteryV - _batteryGaugeMinV) / (_batteryGaugeMaxV - _batteryGaugeMinV);
+                        _bootButtonDown = true;
+                        _bootButtonPressStartMs = millis();
                     }
+                }
+                else
+                {
+                    if (_bootButtonDown)
+                    {
+                        uint32_t pressDurationMs = Raft::timeElapsed(millis(), _bootButtonPressStartMs);
+                        _bootButtonDown = false;
+                        _bootButtonPressStartMs = 0;
+                        if ((pressDurationMs < 1500) && !_batteryGaugeActive)
+                        {
+                            float batteryV = _powerAndSleep.getBatteryVoltage();
+                            if (batteryV < 0.0f)
+                                batteryV = 0.0f;
 
-                    if (fraction < 0.0f)
-                        fraction = 0.0f;
-                    if (fraction > 1.0f)
-                        fraction = 1.0f;
+                            float fraction = 0.0f;
+                            if (_batteryGaugeMaxV > _batteryGaugeMinV)
+                            {
+                                fraction = (batteryV - _batteryGaugeMinV) / (_batteryGaugeMaxV - _batteryGaugeMinV);
+                            }
 
-                    uint8_t ledCount = static_cast<uint8_t>(fraction * LED_GRID_WIDTH + 0.5f);
-                    if (ledCount > LED_GRID_WIDTH)
-                        ledCount = LED_GRID_WIDTH;
+                            if (fraction < 0.0f)
+                                fraction = 0.0f;
+                            if (fraction > 1.0f)
+                                fraction = 1.0f;
+
+                            uint8_t ledCount = static_cast<uint8_t>(fraction * LED_GRID_WIDTH + 0.5f);
+                            if (ledCount > LED_GRID_WIDTH)
+                                ledCount = LED_GRID_WIDTH;
 
 #ifdef DEBUG_LOOP_STATE_MACHINE
-                    LOG_I(MODULE_PREFIX, "battery gauge show V=%.2f min=%.2f max=%.2f leds=%u", batteryV, _batteryGaugeMinV,
-                          _batteryGaugeMaxV, static_cast<unsigned>(ledCount));
+                            LOG_I(MODULE_PREFIX, "battery gauge show V=%.2f min=%.2f max=%.2f leds=%u", batteryV, _batteryGaugeMinV,
+                                  _batteryGaugeMaxV, static_cast<unsigned>(ledCount));
 #endif
-                    _batteryGaugeActive = true;
-                    _batteryGaugeStartMs = millis();
-                    _batteryGaugeSweepStartMs = _batteryGaugeStartMs;
-                    _batteryGaugeTargetLeds = ledCount;
-                    _batteryGaugeLastShown = 0;
+                            _batteryGaugeActive = true;
+                            _batteryGaugeStartMs = millis();
+                            _batteryGaugeSweepStartMs = _batteryGaugeStartMs;
+                            _batteryGaugeTargetLeds = ledCount;
+                            _batteryGaugeLastShown = 0;
+                        }
+                    }
                 }
 
-                _lastBootButtonPressed = bootButtonPressed;
+                if (_bootButtonDown && !_batteryGaugeActive)
+                {
+                    if (Raft::timeElapsed(millis(), _bootButtonPressStartMs) >= 1500)
+                    {
+                        _batteryGaugeActive = false;
+                        _gameMode.start(millis());
+                        setState(GAME_MODE);
+                        return;
+                    }
+                }
 
                 if (_batteryGaugeActive)
                 {
@@ -328,6 +354,26 @@ void WordyWatch::loop()
                 return;
             }
             break;
+
+        case GAME_MODE:
+        {
+            bool bootButtonPressed = false;
+            if (_bootButtonPinNum >= 0)
+                bootButtonPressed = (gpio_get_level((gpio_num_t)_bootButtonPinNum) == 0);
+
+            GameMode::UpdateResult result = _gameMode.update(_accelerometer, bootButtonPressed, millis());
+            _gameMode.render(_display);
+
+            if (result.exitRequested)
+            {
+                _bootButtonDown = false;
+                _bootButtonPressStartMs = 0;
+                updateDisplayWithMinuteIndicators(true);
+                setState(DISPLAYING_TIME);
+                return;
+            }
+            return;
+        }
 
         case PREPARING_TO_SLEEP:
             _display.clear();

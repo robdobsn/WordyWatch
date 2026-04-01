@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <stdint.h>
 #include <time.h>
@@ -23,6 +24,8 @@ public:
     void showTimeWithMinuteIndicators(const struct tm& timeinfo);
     void showBatteryGauge(uint8_t ledCount);
     void showBatteryGaugeWithMinuteIndicators(uint8_t ledCount);
+    void showBreakoutFrame(int paddleTop, int paddleLen, int ballX, int ballY,
+                           const std::array<std::array<bool, LED_GRID_HEIGHT>, 2>& bricks);
     void clear();
 
 private:

@@ -138,6 +138,36 @@ void WordyWatchDisplay::showBatteryGaugeWithMinuteIndicators(uint8_t ledCount)
     sendMaskToPanel(mask, LED_MASK_WORDS);
 }
 
+void WordyWatchDisplay::showBreakoutFrame(int paddleTop, int paddleLen, int ballX, int ballY,
+    const std::array<std::array<bool, LED_GRID_HEIGHT>, 2>& bricks)
+{
+    uint32_t mask[LED_MASK_WORDS] = {};
+
+    for (int idx = 0; idx < paddleLen; idx++)
+    {
+        int y = paddleTop + idx;
+        if (y >= 0 && y < LED_GRID_HEIGHT)
+            setLedInMask(mask, 0, static_cast<uint16_t>(y));
+    }
+
+    for (int col = 0; col < 2; col++)
+    {
+        int x = LED_GRID_WIDTH - 2 + col;
+        if (x < 0 || x >= LED_GRID_WIDTH)
+            continue;
+        for (int y = 0; y < LED_GRID_HEIGHT; y++)
+        {
+            if (bricks[col][y])
+                setLedInMask(mask, static_cast<uint16_t>(x), static_cast<uint16_t>(y));
+        }
+    }
+
+    if (ballX >= 0 && ballX < LED_GRID_WIDTH && ballY >= 0 && ballY < LED_GRID_HEIGHT)
+        setLedInMask(mask, static_cast<uint16_t>(ballX), static_cast<uint16_t>(ballY));
+
+    sendMaskToPanel(mask, LED_MASK_WORDS);
+}
+
 void WordyWatchDisplay::clear()
 {
 #ifdef DEBUG_TIME_DISPLAY

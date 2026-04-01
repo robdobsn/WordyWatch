@@ -16,6 +16,7 @@
 #include "RTC.h"
 #include "PowerAndSleep.h"
 #include "WordyWatchDisplay.h"
+#include "GameMode.h"
 #include "RaftJsonNVS.h"
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
@@ -47,6 +48,7 @@ private:
     {
         INITIAL_STATE,
         DISPLAYING_TIME,
+        GAME_MODE,
         PREPARING_TO_SLEEP,
         SLEEPING,
         WOKEN_UP,
@@ -78,7 +80,8 @@ private:
     uint32_t _longPressMs = 2000;
     uint8_t _minuteResolution = 5;
     
-    uint32_t _lastBootButtonPressMs = 0;
+    uint32_t _bootButtonPressStartMs = 0;
+    bool _bootButtonDown = false;
     bool _batteryGaugeActive = false;
     uint32_t _batteryGaugeStartMs = 0;
     uint8_t _batteryGaugeTargetLeds = 0;
@@ -88,6 +91,8 @@ private:
 
     int _bootButtonPinNum = -1;
     bool _bootButtonPullup = false;
+
+    GameMode _gameMode;
 
     int8_t _lastDisplayedSecond = -1;
     int8_t _lastDisplayedMinute = -1;
