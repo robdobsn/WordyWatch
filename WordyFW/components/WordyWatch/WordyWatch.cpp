@@ -225,6 +225,9 @@ void WordyWatch::setup()
 #endif
 #endif // FEATURE_WRIST_TILT
 
+    // Seed battery voltage so gauge is available immediately
+    _powerAndSleep.forceReadBatterySample();
+
     // Debug - do initial power reading
     bool isShutdownRequired = _powerAndSleep.update();
     LOG_I(MODULE_PREFIX, "setup powerCtrlPin %d strapCtrlPin %d vSensePin %d currentADC %d currentVoltage %.2fV batteryLowV %.2f isShutdownRequired %d powerButtonVsenseLevel %d powerButtonOffTime %dms", 

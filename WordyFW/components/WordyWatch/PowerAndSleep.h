@@ -178,10 +178,10 @@ public:
     }
     
     /// @brief Get current battery voltage
-    /// @return Calculated voltage in volts
+    /// @return Calculated voltage in volts (0.0 if no samples yet)
     float getBatteryVoltage() const
     {
-        if (_vsenseSampleCount < 10)
+        if (_vsenseSampleCount < 1)
             return 0.0f;
         return getVoltageFromADCReading(_vsenseAvg.getAverage());
     }
@@ -264,6 +264,18 @@ public:
         _powerButtonPressed = false;
         _powerButtonPressChangeTimeMs = 0;
         _powerButtonPressDownTimeMs = 0;
+    }
+
+    /// @brief Force an immediate battery voltage sample (bypasses button-press filter)
+    void forceReadBatterySample()
+    {
+        if (_vsensePin < 0)
+            return;
+        uint32_t reading = analogRead(_vsensePin);
+        _vsenseAvg.sample(reading);
+        _vsenseSampleCount++;
+        _batteryV = getVoltageFromADCReading(_vsenseAvg.getAverage());
+        _batteryValid = (_vsenseSampleCount >= BATTERY_VALID_SAMPLE_COUNT);
     }
 
 private:
