@@ -8,8 +8,8 @@ set(RAFT_COMPONENTS
 )
 
 # File system
-set(FS_TYPE "littlefs")
-set(FS_IMAGE_PATH "../Common/FSImage")
+# set(FS_TYPE "littlefs")
+# set(FS_IMAGE_PATH "../Common/FSImage")
 
 # Web UI
 

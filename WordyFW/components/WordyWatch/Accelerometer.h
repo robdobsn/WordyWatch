@@ -128,7 +128,7 @@ public:
         {
             uint8_t swReset[] = {0x12, 0x01};  // CTRL3_C: SW_RESET (bit0)
             i2c_master_transmit(_devHandle, swReset, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(50));  // Wait for reset to complete
+            vTaskDelay(pdMS_TO_TICKS(20));  // Wait for reset to complete
             LOG_I(MODULE_PREFIX, "init: Software reset complete");
         }
 
@@ -199,7 +199,7 @@ public:
             }
             
             // Small delay between writes
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         LOG_I(MODULE_PREFIX, "init: Configured LSM6DS for wrist tilt detection at address 0x%02X", _i2cAddr);
@@ -229,7 +229,7 @@ public:
         {
             uint8_t bankB[] = {0x01, 0xA0};  // FUNC_CFG_ACCESS: BANK_B (bits 7:5 = 101)
             i2c_master_transmit(_devHandle, bankB, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             // Read current wrist tilt config registers in BANK B
             const uint8_t bankBRegs[] = {0x50, 0x54, 0x59};  // A_WRIST_TILT_LAT, A_WRIST_TILT_THS, A_WRIST_TILT_MASK
@@ -247,20 +247,20 @@ public:
             //   Use default — filters out brief bumps, requires deliberate gesture
             uint8_t latency[] = {0x50, _wristTiltLatency};
             i2c_master_transmit(_devHandle, latency, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             // A_WRIST_TILT_THS (0x54): threshold, 1 LSB = 15.625mg, default 0x20 (500mg)
             //   Use default — good balance for wrist raise detection
             uint8_t threshold[] = {0x54, _wristTiltThreshold};
             i2c_master_transmit(_devHandle, threshold, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             // A_WRIST_TILT_MASK (0x59): axis direction enable mask
             //   Bits [7:2]: zpos, zneg, ypos, yneg, xpos, xneg
             //   Set to 0xFC to enable ALL directions
             uint8_t mask[] = {0x59, _wristTiltMask};
             i2c_master_transmit(_devHandle, mask, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             // Read back to verify
             for (size_t i = 0; i < sizeof(bankBRegs); i++)
@@ -274,7 +274,7 @@ public:
             // Switch back to USER BANK
             uint8_t userBank[] = {0x01, 0x00};
             i2c_master_transmit(_devHandle, userBank, 2, 1000);
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 #endif
         

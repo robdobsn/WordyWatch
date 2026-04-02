@@ -52,7 +52,9 @@ WordyWatch::~WordyWatch()
 /// @brief Setup the WordyWatch device
 void WordyWatch::setup()
 {
- // Get power control pin
+    // --- Phase 1: Power latch and critical GPIO (must be first) ---
+
+    // Get power control pin
     String pinName = config.getString("powerCtrlPin", "");
     int powerCtrlPin = ConfigPinMap::getPinFromName(pinName.c_str());
 
@@ -98,6 +100,46 @@ void WordyWatch::setup()
     bool wakeIntPinPullup = config.getBool("wakeIntPinPullup",
                                            config.getBool("wakePinPullup", false));
 
+    // Configure power management (latches power, unisolates strapping pins)
+    _powerAndSleep.configure(powerCtrlPin, strapCtrlPin, vsensePin,
+                     vsenseSlope, vsenseIntercept,
+                     batteryLowV, powerButtonVsenseLevel, powerButtonOffTimeMs,
+                     wakeIntPinNum, wakeIntPinPullup);
+
+    // --- Phase 2: I2C + RTC + display time (fast path to visible output) ---
+
+    // Get I2C configuration
+    pinName = config.getString("i2cSdaPin", "");
+    _i2cSdaPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    pinName = config.getString("i2cSclPin", "");
+    _i2cSclPin = ConfigPinMap::getPinFromName(pinName.c_str());
+    _i2cFreqHz = config.getLong("i2cFreqHz", 100000);
+    _accelerometer.setI2CAddress(config.getLong("accelI2CAddr", 0x6a));
+    _rtc.setI2CConfig(config.getLong("rtcI2CAddr", 0x52), config.getString("rtcDevType", ""));
+
+    // Initialize I2C and read RTC time as early as possible
+    if (initI2C())
+    {
+        LOG_I(MODULE_PREFIX, "I2C initialized on SDA=%d SCL=%d freq=%ldHz", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
+        
+        // Initialize RTC and set system time first (before IMU, for fastest display)
+        _rtc.init();
+        _rtc.disableInterrupts();
+        _rtc.setSystemTimeFromRTC();
+    }
+    else
+    {
+        LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
+    }
+
+    // Get minute resolution (needed for display)
+    _minuteResolution = config.getLong("minuteResolution", 5);
+
+    // Display time immediately
+    updateDisplayWithMinuteIndicators(true);
+
+    // --- Phase 3: Remaining config (non-time-critical) ---
+
     // Get BOOT button configuration
     pinName = config.getString("bootButtonPinNum", "");
     _bootButtonPinNum = ConfigPinMap::getPinFromName(pinName.c_str());
@@ -109,15 +151,10 @@ void WordyWatch::setup()
             gpio_pullup_en((gpio_num_t)_bootButtonPinNum);
     }
 
-    // Configure power management
-    _powerAndSleep.configure(powerCtrlPin, strapCtrlPin, vsensePin,
-                     vsenseSlope, vsenseIntercept,
-                     batteryLowV, powerButtonVsenseLevel, powerButtonOffTimeMs,
-                     wakeIntPinNum, wakeIntPinPullup);
-
     // Get sleep configuration
     _showTimeForMs = config.getLong("showTimeForMs", 10000);
 
+#ifdef FEATURE_BATTERY_GAUGE
     // Battery gauge display configuration
     _batteryGaugeShowMs = config.getLong("batteryGaugeShowMs", 1500);
     _batteryGaugeSweepMs = config.getLong("batteryGaugeSweepMs", 333);
@@ -130,7 +167,9 @@ void WordyWatch::setup()
     }
     if (_batteryGaugeSweepMs == 0)
         _batteryGaugeSweepMs = 1;
+#endif
 
+#ifdef FEATURE_GAMES
     // Ball simulation game configuration
     int ballCount = config.getLong("balls/count", 12);
     float ballViscosity = config.getDouble("balls/viscosity", 0.5);
@@ -141,6 +180,7 @@ void WordyWatch::setup()
     uint32_t breakoutBallTickMs = static_cast<uint32_t>(config.getLong("breakout/ballTickMs", 100));
     float breakoutPaddleSpeed = config.getDouble("breakout/paddleSpeed", 0.25);
     _gameMode.configureBreakout(breakoutBrickColumns, breakoutBallTickMs, breakoutPaddleSpeed);
+#endif
 
     // Override with persisted settings if present
     long persistedShowTimeMs = _settingsNVS.getLong("showTimeForMs", -1);
@@ -160,8 +200,8 @@ void WordyWatch::setup()
         }
     }
 
-    // Get minute resolution
-    _minuteResolution = config.getLong("minuteResolution", 5);
+#ifdef FEATURE_WRIST_TILT
+    // --- Phase 4: Deferred IMU init (after display is already showing) ---
 
     auto clampByte = [](long value) {
         if (value < 0)
@@ -176,37 +216,14 @@ void WordyWatch::setup()
     uint8_t wristMask = clampByte(config.getLong("WristTilt/mask", 0xFC));
     _accelerometer.setWristTiltConfig(wristLatency, wristThreshold, wristMask);
 
-    // Get I2C configuration
-    pinName = config.getString("i2cSdaPin", "");
-    _i2cSdaPin = ConfigPinMap::getPinFromName(pinName.c_str());
-    pinName = config.getString("i2cSclPin", "");
-    _i2cSclPin = ConfigPinMap::getPinFromName(pinName.c_str());
-    _i2cFreqHz = config.getLong("i2cFreqHz", 100000);
-    _accelerometer.setI2CAddress(config.getLong("accelI2CAddr", 0x6a));
-    _rtc.setI2CConfig(config.getLong("rtcI2CAddr", 0x52), config.getString("rtcDevType", ""));
-
-    // Initialize I2C if pins configured
-    if (initI2C())
-    {
-        LOG_I(MODULE_PREFIX, "I2C initialized on SDA=%d SCL=%d freq=%ldHz", _i2cSdaPin, _i2cSclPin, _i2cFreqHz);
-        
-        // Initialize accelerometer
-        _accelerometer.init();
-        
-        // Initialize RTC
-        _rtc.init();
-        _rtc.disableInterrupts();
-        _rtc.setSystemTimeFromRTC();
-    }
-    else
-    {
-        LOG_E(MODULE_PREFIX, "Failed to initialize I2C");
-    }
+    // Initialize accelerometer (already added to I2C bus by initI2C)
+    _accelerometer.init();
 
 #ifdef DEBUG_WRIST_TILT_INT
     // Install GPIO ISR to count wrist tilt interrupts on WAKE_INT pin
     _accelerometer.setupWristTiltInterrupt(wakeIntPinNum);
 #endif
+#endif // FEATURE_WRIST_TILT
 
     // Debug - do initial power reading
     bool isShutdownRequired = _powerAndSleep.update();
@@ -218,6 +235,9 @@ void WordyWatch::setup()
     
     // Initialize time last woken
     _timeLastWokenMs = millis();
+
+    // Skip INITIAL_STATE in loop — we already displayed the time
+    setState(DISPLAYING_TIME);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -265,9 +285,12 @@ void WordyWatch::loop()
                 {
                     if (_bootButtonDown)
                     {
-                        uint32_t pressDurationMs = Raft::timeElapsed(millis(), _bootButtonPressStartMs);
                         _bootButtonDown = false;
+#ifdef FEATURE_BATTERY_GAUGE
+                        uint32_t pressDurationMs = Raft::timeElapsed(millis(), _bootButtonPressStartMs);
+#endif
                         _bootButtonPressStartMs = 0;
+#ifdef FEATURE_BATTERY_GAUGE
                         if ((pressDurationMs < 1500) && !_batteryGaugeActive)
                         {
                             float batteryV = _powerAndSleep.getBatteryVoltage();
@@ -299,9 +322,11 @@ void WordyWatch::loop()
                             _batteryGaugeTargetLeds = ledCount;
                             _batteryGaugeLastShown = 0;
                         }
+#endif // FEATURE_BATTERY_GAUGE
                     }
                 }
 
+#ifdef FEATURE_GAMES
                 if (_bootButtonDown && !_batteryGaugeActive)
                 {
                     if (Raft::timeElapsed(millis(), _bootButtonPressStartMs) >= 1500)
@@ -312,7 +337,9 @@ void WordyWatch::loop()
                         return;
                     }
                 }
+#endif // FEATURE_GAMES
 
+#ifdef FEATURE_BATTERY_GAUGE
                 if (_batteryGaugeActive)
                 {
                     if (_batteryGaugeTargetLeds == 0)
@@ -340,6 +367,7 @@ void WordyWatch::loop()
                     }
                     return;
                 }
+#endif // FEATURE_BATTERY_GAUGE
 
                 updateDisplayWithMinuteIndicators(false);
             }
@@ -353,6 +381,7 @@ void WordyWatch::loop()
             }
             break;
 
+#ifdef FEATURE_GAMES
         case GAME_MODE:
         {
             bool bootButtonPressed = false;
@@ -372,9 +401,13 @@ void WordyWatch::loop()
             }
             return;
         }
+#endif // FEATURE_GAMES
 
         case PREPARING_TO_SLEEP:
             _display.clear();
+            // Clear any latched IMU interrupt before sleep so EXT1 doesn't re-trigger immediately
+            // This is needed even when wrist tilt is disabled to prevent immediate wakeup
+            _accelerometer.clearInterrupt();
             setState(SLEEPING);
             return;
 
