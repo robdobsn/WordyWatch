@@ -200,30 +200,37 @@ void WordyWatch::setup()
         }
     }
 
-#ifdef FEATURE_WRIST_TILT
     // --- Phase 4: Deferred IMU init (after display is already showing) ---
+#ifdef FEATURE_WRIST_TILT
+    {
+        auto clampByte = [](long value) {
+            if (value < 0)
+                return static_cast<uint8_t>(0);
+            if (value > 0xFF)
+                return static_cast<uint8_t>(0xFF);
+            return static_cast<uint8_t>(value);
+        };
 
-    auto clampByte = [](long value) {
-        if (value < 0)
-            return static_cast<uint8_t>(0);
-        if (value > 0xFF)
-            return static_cast<uint8_t>(0xFF);
-        return static_cast<uint8_t>(value);
-    };
+        uint8_t wristLatency = clampByte(config.getLong("WristTilt/latency", 8));
+        uint8_t wristThreshold = clampByte(config.getLong("WristTilt/threshold", 16));
+        uint8_t wristMask = clampByte(config.getLong("WristTilt/mask", 0xFC));
+        _accelerometer.setWristTiltConfig(wristLatency, wristThreshold, wristMask);
+    }
+#endif
 
-    uint8_t wristLatency = clampByte(config.getLong("WristTilt/latency", 8));
-    uint8_t wristThreshold = clampByte(config.getLong("WristTilt/threshold", 16));
-    uint8_t wristMask = clampByte(config.getLong("WristTilt/mask", 0xFC));
-    _accelerometer.setWristTiltConfig(wristLatency, wristThreshold, wristMask);
+    // Initialize accelerometer (always — clears stale wrist tilt state from previous boots)
+    _accelerometer.init(
+#ifdef FEATURE_WRIST_TILT
+        true
+#else
+        false
+#endif
+    );
 
-    // Initialize accelerometer (already added to I2C bus by initI2C)
-    _accelerometer.init();
-
-#ifdef DEBUG_WRIST_TILT_INT
+#if defined(FEATURE_WRIST_TILT) && defined(DEBUG_WRIST_TILT_INT)
     // Install GPIO ISR to count wrist tilt interrupts on WAKE_INT pin
     _accelerometer.setupWristTiltInterrupt(wakeIntPinNum);
 #endif
-#endif // FEATURE_WRIST_TILT
 
     // Seed battery voltage so gauge is available immediately
     _powerAndSleep.forceReadBatterySample();

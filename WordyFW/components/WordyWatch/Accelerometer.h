@@ -97,9 +97,10 @@ public:
         return true;
     }
 
-    /// @brief Initialize LSM6DS accelerometer with wrist tilt detection
+    /// @brief Initialize LSM6DS accelerometer
+    /// @param enableWristTilt If true, configure wrist tilt interrupt; if false, minimal config (accel data only)
     /// @return True if successful
-    bool init()
+    bool init(bool enableWristTilt = true)
     {
         if (!_devHandle)
         {
@@ -169,12 +170,12 @@ public:
         };
         LOG_I(MODULE_PREFIX, "init: Using basic tilt interrupt mode (DEBUG)");
 #else
-        // Wrist tilt interrupt for LSM6DS3TR-C
-        // CTRL10_C: func_en (bit2) MUST be set for embedded functions engine to run,
-        //   plus wrist_tilt_en (bit7) to enable wrist tilt detection
-        // INT2 routing for wrist tilt is via DRDY_PULSE_CFG_G (0x0B) bit0 (int2_wrist_tilt),
-        //   NOT via MD2_CFG int2_tilt (that's for basic tilt only)
-        const RegValue initSequence[] = {
+        const RegValue initSequenceWristTilt[] = {
+            // Wrist tilt interrupt for LSM6DS3TR-C
+            // CTRL10_C: func_en (bit2) MUST be set for embedded functions engine to run,
+            //   plus wrist_tilt_en (bit7) to enable wrist tilt detection
+            // INT2 routing for wrist tilt is via DRDY_PULSE_CFG_G (0x0B) bit0 (int2_wrist_tilt),
+            //   NOT via MD2_CFG int2_tilt (that's for basic tilt only)
             {0x10, 0x60},  // CTRL1_XL: 104Hz ODR, ±2g (ODR=0100, FS=00) — higher ODR for wrist tilt
             {0x11, 0x00},  // CTRL2_G: Gyro OFF
             {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
@@ -184,10 +185,28 @@ public:
             {0x19, 0x84},  // CTRL10_C: wrist_tilt_en (bit7) + func_en (bit2) - enable embedded functions
             {0x0B, 0x01}   // DRDY_PULSE_CFG_G: int2_wrist_tilt (bit0) - route wrist tilt to INT2
         };
+        const RegValue initSequenceNoWristTilt[] = {
+            // Minimal config: accel data available for reads, no interrupt routing
+            // INT2 must still be active-low open-drain so it idles HIGH (pulled up)
+            // and doesn't trigger ESP EXT1 wakeup (ANY_LOW)
+            {0x10, 0x20},  // CTRL1_XL: 26Hz ODR, ±2g (low power)
+            {0x11, 0x00},  // CTRL2_G: Gyro OFF
+            {0x12, 0x74},  // CTRL3_C: BDU (bit6), active-low (bit5), open-drain (bit4), IF_INC (bit2)
+            {0x0E, 0x00},  // INT2_CTRL: clear all DRDY/FIFO routing on INT2
+            {0x5F, 0x00},  // MD2_CFG: clear all routing
+            {0x58, 0x00},  // TAP_CFG: all interrupts disabled
+            {0x19, 0x00},  // CTRL10_C: embedded functions disabled
+            {0x0B, 0x00}   // DRDY_PULSE_CFG_G: no wrist tilt routing
+        };
+        const RegValue* initSequence = enableWristTilt ? initSequenceWristTilt : initSequenceNoWristTilt;
+        const size_t initSequenceCount = enableWristTilt
+            ? sizeof(initSequenceWristTilt) / sizeof(initSequenceWristTilt[0])
+            : sizeof(initSequenceNoWristTilt) / sizeof(initSequenceNoWristTilt[0]);
+        LOG_I(MODULE_PREFIX, "init: wrist tilt %s", enableWristTilt ? "ENABLED" : "DISABLED");
 #endif
 
         // Write each register
-        for (size_t i = 0; i < sizeof(initSequence) / sizeof(initSequence[0]); i++)
+        for (size_t i = 0; i < initSequenceCount; i++)
         {
             uint8_t write_buf[2] = {initSequence[i].reg, initSequence[i].value};
             esp_err_t err = i2c_master_transmit(_devHandle, write_buf, sizeof(write_buf), 1000);
@@ -202,10 +221,11 @@ public:
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
-        LOG_I(MODULE_PREFIX, "init: Configured LSM6DS for wrist tilt detection at address 0x%02X", _i2cAddr);
+        LOG_I(MODULE_PREFIX, "init: Configured LSM6DS at address 0x%02X wristTilt=%s", _i2cAddr,
+              enableWristTilt ? "ON" : "OFF");
 
         // Read back all written registers to verify writes took effect
-        for (size_t i = 0; i < sizeof(initSequence) / sizeof(initSequence[0]); i++)
+        for (size_t i = 0; i < initSequenceCount; i++)
         {
             uint8_t reg = initSequence[i].reg;
             uint8_t readVal = 0;
@@ -223,6 +243,13 @@ public:
         }
 
 #if !defined(DEBUG_USE_MOTION_WAKEUP_INT) && !defined(DEBUG_USE_BASIC_TILT_INT)
+        if (!enableWristTilt)
+        {
+            // No wrist tilt — skip BANK_B config, just clear pending interrupts
+            clearInterrupt();
+            return true;
+        }
+
         // Access embedded function BANK B to read/configure wrist tilt parameters
         // FUNC_CFG_ACCESS (0x01): func_cfg_en is bits [7:5]
         //   USER_BANK=0x00, BANK_A=0x80, BANK_B=0xA0
