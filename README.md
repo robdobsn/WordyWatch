@@ -1,6 +1,6 @@
 # WordyWatch
 
-A wearable word clock watch that displays time using military time format in words. See [https://robdobson.com/2026/04/a-wordy-watch/](A Wordy Watch) for full build details. Inspired by [QlockTwo](https://www.qlocktwo.com/en-us) word clocks, WordyWatch brings this elegant time display concept to a wrist-worn device. 
+A wearable word clock watch that displays time using military time format in words. See [A Wordy Watch](https://robdobson.com/2026/04/a-wordy-watch/) for full build details. Inspired by [QlockTwo](https://www.qlocktwo.com/en-us) word clocks, WordyWatch brings this elegant time display concept to a wrist-worn device. 
 
 ## Overview
 
