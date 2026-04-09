@@ -14,6 +14,9 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,7 +28,10 @@ jobs:
 
       - name: Build firmware
         working-directory: WordyFW
-        run: idf.py -B build/WordyWatchV11 build
+        shell: bash
+        run: |
+          . /opt/esp/idf/export.sh
+          idf.py -B build/WordyWatchV11 build
 
       - name: Prepare flasher site
         run: |
