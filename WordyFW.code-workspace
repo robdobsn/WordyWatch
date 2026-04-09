@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "WordyFW"
+		},
+		{
+			"path": "../raft/RaftCLI"
+		},
+		{
+			"path": "../../../../mnt/c/Users/rob/Documents/rdev/raft/RaftCLI"
+		},
+		{
+			"path": "../MiscTestAndEvalCode/ESP32S3-serial-logger"
+		}
+	],
+	"settings": {}
+}

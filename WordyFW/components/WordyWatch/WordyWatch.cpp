@@ -415,6 +415,8 @@ void WordyWatch::loop()
 
         case PREPARING_TO_SLEEP:
             _display.clear();
+            // Power down IMU to minimize current during deep sleep (~75µA → ~3µA)
+            _accelerometer.powerDown();
             // Clear any latched IMU interrupt before sleep so EXT1 doesn't re-trigger immediately
             // This is needed even when wrist tilt is disabled to prevent immediate wakeup
             _accelerometer.clearInterrupt();

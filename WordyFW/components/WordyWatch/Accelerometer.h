@@ -428,6 +428,33 @@ public:
     }
 #endif
 
+    /// @brief Put accelerometer into power-down mode to minimize current during deep sleep
+    /// Writes ODR=0 to CTRL1_XL and disables embedded functions in CTRL10_C
+    /// Reduces current from ~75µA (104Hz + wrist tilt) to ~3µA
+    void powerDown()
+    {
+        if (!_devHandle)
+            return;
+
+        // CTRL1_XL (0x10): set ODR to 0 (power-down)
+        uint8_t cmd1[] = {0x10, 0x00};
+        esp_err_t err = i2c_master_transmit(_devHandle, cmd1, 2, 1000);
+        if (err != ESP_OK)
+        {
+            LOG_W(MODULE_PREFIX, "powerDown: Failed to write CTRL1_XL: %s", esp_err_to_name(err));
+        }
+
+        // CTRL10_C (0x19): disable embedded functions (wrist tilt, tilt, etc.)
+        uint8_t cmd2[] = {0x19, 0x00};
+        err = i2c_master_transmit(_devHandle, cmd2, 2, 1000);
+        if (err != ESP_OK)
+        {
+            LOG_W(MODULE_PREFIX, "powerDown: Failed to write CTRL10_C: %s", esp_err_to_name(err));
+        }
+
+        LOG_I(MODULE_PREFIX, "powerDown: IMU set to power-down mode");
+    }
+
     /// @brief Clear accelerometer interrupt by reading status registers
     void clearInterrupt()
     {
