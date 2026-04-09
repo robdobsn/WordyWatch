@@ -1,0 +1,71 @@
+name: Build & Deploy Flasher
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build firmware
+        working-directory: WordyFW
+        run: idf.py -B build/WordyWatchV11 build
+
+      - name: Prepare flasher site
+        run: |
+          mkdir -p _site/firmware
+          cp flasher/index.html _site/
+          cp WordyFW/build/WordyWatchV11/bootloader/bootloader.bin _site/firmware/
+          cp WordyFW/build/WordyWatchV11/partition_table/partition-table.bin _site/firmware/
+          cp WordyFW/build/WordyWatchV11/WordyWatchV11.bin _site/firmware/
+
+          # Write manifest with release version
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          cat > _site/firmware/manifest.json << EOF
+          {
+            "name": "WordyWatch",
+            "version": "${VERSION}",
+            "builds": [
+              {
+                "chipFamily": "ESP32-C6",
+                "parts": [
+                  { "path": "bootloader.bin", "offset": 0 },
+                  { "path": "partition-table.bin", "offset": 32768 },
+                  { "path": "WordyWatchV11.bin", "offset": 131072 }
+                ]
+              }
+            ]
+          }
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

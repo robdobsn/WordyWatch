@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WordyWatch Firmware Flasher</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --primary: #e94560;
+      --text: #eee;
+      --text-muted: #aaa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 2.5rem;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    .subtitle { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.95rem; }
+    .install-wrap { margin: 2rem 0; }
+    esp-web-install-button {
+      --inst-button-color: var(--primary);
+    }
+    .instructions {
+      text-align: left;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .instructions h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .instructions ol {
+      padding-left: 1.25rem;
+      color: var(--text-muted);
+      line-height: 1.8;
+      font-size: 0.9rem;
+    }
+    .instructions li { margin-bottom: 0.25rem; }
+    .warning {
+      margin-top: 1.5rem;
+      padding: 0.75rem 1rem;
+      background: rgba(233, 69, 96, 0.15);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .footer {
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .footer a { color: var(--primary); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>WordyWatch</h1>
+    <p class="subtitle">Flash firmware to your watch via USB</p>
+
+    <div class="install-wrap">
+      <esp-web-install-button manifest="./firmware/manifest.json">
+        <button slot="activate">Install WordyWatch Firmware</button>
+        <span slot="unsupported">
+          Your browser does not support WebSerial.<br />
+          Please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.
+        </span>
+        <span slot="not-allowed">
+          WebSerial is not allowed in this context.<br />
+          Make sure you are accessing this page over HTTPS.
+        </span>
+      </esp-web-install-button>
+    </div>
+
+    <div class="instructions">
+      <h2>How to flash</h2>
+      <ol>
+        <li>Connect your WordyWatch to your computer via USB-C</li>
+        <li>Press and hold the <strong>power button</strong> on the watch</li>
+        <li>Click <strong>Install WordyWatch Firmware</strong> above</li>
+        <li>Select the serial port for your watch</li>
+        <li>Keep holding the power button until flashing begins, then release</li>
+        <li>Wait for the flash to complete</li>
+      </ol>
+    </div>
+
+    <div class="warning">
+      Requires <strong>Chrome</strong> or <strong>Edge</strong> on desktop.
+      WebSerial is not supported in Firefox, Safari, or mobile browsers.
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="https://github.com/robdobsn/WordyWatch" target="_blank" rel="noopener">
+      WordyWatch on GitHub
+    </a>
+  </div>
+</body>
+</html>
