@@ -186,7 +186,7 @@
     "strapCtrlPin": 1,
     "vsensePin": 2,
     "wakeIntPinNum": 5,
-    "wakeIntPinPullup": true,
+    "wakeIntPinPullup": false,
     "bootButtonPinNum": 9,
     "bootButtonPullup": true,
     "i2cSdaPin": 6,

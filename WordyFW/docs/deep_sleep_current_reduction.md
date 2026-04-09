@@ -37,15 +37,14 @@
 
 ### 3. Charlieplex GPIO hold during deep sleep
 
-Use `gpio_hold_en()` on all 12 charlieplex pins (set LOW/input) before sleep to prevent undefined states and parasitic LED leakage.
-
-- **Expected saving:** ~20-50µA (depends on leakage paths)
+- **Change:** Added `holdPinsForSleep()` — set all 12 GPIOs to output LOW with `gpio_hold_en()`.
+- **Result:** No current saving. Caused display not to turn back on after wake (gpio_hold persists across deep sleep reset and blocks reconfiguration). **Reverted.**
 
 ### 4. Remove redundant internal pull-up on WAKE_INT#
 
-External R24 (47kΩ) already pulls up WAKE_INT#. The ESP32 internal pull-up (~45kΩ) is redundant. Set `wakeIntPinPullup` to `false` in SysTypes.json.
-
+- **Change:** Set `wakeIntPinPullup` to `false` in `systypes/WordyWatchV11/SysTypes.json`. External R24 (47kΩ) already pulls up WAKE_INT#.
 - **Expected saving:** minor (~1-5µA)
+- **Result:** ~0.6µA saving (56.6µA → 56.0µA). Marginal but confirmed the internal pull-up was slightly redundant.
 
 ### 5. Check R18 (10kΩ) on RTC EVI pin
 
