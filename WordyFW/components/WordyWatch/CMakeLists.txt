@@ -10,6 +10,9 @@ idf_component_register(
                 REQUIRES
                   RaftCore
                   esp_driver_i2c
+                  esp_driver_gpio
+                  esp_timer
+                  esp_hw_support
                 PRIV_REQUIRES
                   DeviceLEDCharlie
                 )

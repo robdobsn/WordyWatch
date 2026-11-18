@@ -129,6 +129,12 @@ public:
             LOG_I(MODULE_PREFIX, "init: CLKOUT configured for 32.768 kHz");
         }
 
+        // Enable backup switchover so the RTC keeps time from VBACKUP (VBAT) when VDD (+3V3) is cut
+        if (_deviceType == RTCDeviceType::RV3028C7)
+        {
+            configureBackupSwitchover();
+        }
+
         return true;
     }
 
@@ -349,6 +355,94 @@ private:
     {
         return i2c_master_transmit_receive(_devHandle, &reg, 1, &value, 1, 1000) == ESP_OK;
     }
+
+    /// @brief Write a single register
+    bool writeRegister(uint8_t reg, uint8_t value)
+    {
+        uint8_t buf[2] = {reg, value};
+        return i2c_master_transmit(_devHandle, buf, sizeof(buf), 1000) == ESP_OK;
+    }
+
+    /// @brief Wait for the EEPROM busy flag (Status reg 0x0E bit 7) to clear
+    /// @return True if EEPROM became idle within the timeout
+    bool waitEEPROMIdle()
+    {
+        for (int i = 0; i < 50; i++)   // ~500ms max; tEEbusy is typically <63ms
+        {
+            uint8_t status = 0;
+            if (readRegister(0x0E, status) && ((status & 0x80) == 0))
+                return true;
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        LOG_W(MODULE_PREFIX, "waitEEPROMIdle: EEPROM still busy after timeout");
+        return false;
+    }
+
+    /// @brief Enable automatic backup switchover (RV-3028-C7)
+    /// Configures the EEPROM Backup register (0x37) for Level Switching Mode so the RTC
+    /// runs from VBACKUP (wired to VBAT) when VDD (+3V3) collapses on power-down/low battery.
+    /// Persists the setting to configuration EEPROM so it survives a full power loss.
+    void configureBackupSwitchover()
+    {
+        // Backup register (0x37) bit layout:
+        //   [7] EEOffset[0]  [6] BSIE  [5] TCE  [4] FEDE  [3:2] BSM[1:0]  [1:0] TCR[1:0]
+        //   BSM: 00=disabled, 01=Direct Switching, 11=Level Switching (LSM)
+        constexpr uint8_t BSM_MASK = 0x0C;   // bits 3:2
+        constexpr uint8_t BSM_LSM  = 0x0C;   // 11 = Level Switching Mode
+        constexpr uint8_t TCE_BIT  = 0x20;   // bit 5 = trickle charger enable
+        constexpr uint8_t FEDE_BIT = 0x10;   // bit 4 = fast edge detection (app manual: always write 1)
+
+        uint8_t backupReg = 0;
+        if (!readRegister(0x37, backupReg))
+        {
+            LOG_E(MODULE_PREFIX, "configureBackupSwitchover: failed to read Backup register");
+            return;
+        }
+
+        // Select Level Switching Mode, keep trickle charger disabled (backup is the main battery)
+        uint8_t newBackupReg = (backupReg & ~(BSM_MASK | TCE_BIT)) | BSM_LSM | FEDE_BIT;
+        if (newBackupReg == backupReg)
+        {
+            LOG_I(MODULE_PREFIX, "configureBackupSwitchover: already configured (0x%02x)", backupReg);
+            return;
+        }
+
+        // Disable automatic EEPROM refresh (Control 1 reg 0x0F bit 3 = EERD) before EEPROM access
+        uint8_t ctrl1 = 0;
+        readRegister(0x0F, ctrl1);
+        writeRegister(0x0F, ctrl1 | 0x08);
+
+        if (waitEEPROMIdle())
+        {
+            // Update the RAM mirror so the new mode takes effect immediately
+            writeRegister(0x37, newBackupReg);
+
+            // Persist a single byte to configuration EEPROM: EEADDR, EEDATA, then command 0x00->0x21
+            writeRegister(0x25, 0x37);           // EEPROM address = Backup register
+            writeRegister(0x26, newBackupReg);   // EEPROM data
+            writeRegister(0x27, 0x00);           // clear command
+            writeRegister(0x27, 0x21);           // write one EEPROM byte
+            waitEEPROMIdle();
+        }
+
+        // Re-enable automatic EEPROM refresh
+        readRegister(0x0F, ctrl1);
+        writeRegister(0x0F, ctrl1 & ~0x08);
+
+        uint8_t verify = 0;
+        readRegister(0x37, verify);
+        if (verify == newBackupReg)
+        {
+            LOG_I(MODULE_PREFIX, "configureBackupSwitchover: Backup register 0x%02x -> 0x%02x (LSM enabled)",
+                  backupReg, verify);
+        }
+        else
+        {
+            LOG_E(MODULE_PREFIX, "configureBackupSwitchover: FAILED Backup register 0x%02x, wanted 0x%02x, read 0x%02x",
+                  backupReg, newBackupReg, verify);
+        }
+    }
+
     uint8_t _i2cAddr;                           // I2C address
     i2c_master_dev_handle_t _devHandle;         // I2C device handle
     RTCDeviceType _deviceType;                  // Device type
